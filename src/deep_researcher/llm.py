@@ -10,6 +10,10 @@ from deep_researcher.config import Config
 
 logger = logging.getLogger("deep_researcher")
 
+
+class ToolCallingNotSupported(Exception):
+    """Raised when the model doesn't support function/tool calling."""
+
 # Rough token estimate: ~4 chars per token for English text
 _CHARS_PER_TOKEN = 4
 
@@ -57,6 +61,14 @@ class LLMClient:
                 logger.warning("API timeout (attempt %d/%d), waiting %ds", attempt + 1, self._max_retries, wait)
                 time.sleep(wait)
             except APIError as e:
+                err_str = str(e).lower()
+                # Detect models that don't support function calling
+                if any(hint in err_str for hint in ("tool", "function", "not supported", "invalid param")):
+                    raise ToolCallingNotSupported(
+                        f"Model '{self.model}' may not support function calling.\n"
+                        f"Recommended models: llama3.1, qwen2.5:14b, gpt-4o, claude-sonnet\n"
+                        f"Original error: {e}"
+                    ) from e
                 # Retry on server errors (5xx), fail fast on client errors (4xx)
                 if e.status_code and 500 <= e.status_code < 600:
                     last_error = e

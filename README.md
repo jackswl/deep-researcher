@@ -51,21 +51,38 @@ ollama pull llama3.1
 deep-researcher "applications of transformer models in structural health monitoring"
 ```
 
-### Run with OpenAI
+### Run with any provider (one flag)
 
 ```bash
-export OPENAI_BASE_URL="https://api.openai.com/v1"
+# OpenAI
 export OPENAI_API_KEY="sk-..."
-deep-researcher "machine learning for drug discovery" --model gpt-4o
-```
+deep-researcher "machine learning for drug discovery" --provider openai
 
-### Run with Anthropic
+# Groq (fast, free tier)
+export OPENAI_API_KEY="gsk_..."
+deep-researcher "CRISPR gene editing" --provider groq
 
-```bash
-export OPENAI_BASE_URL="https://api.anthropic.com/v1"
+# DeepSeek
+export OPENAI_API_KEY="sk-..."
+deep-researcher "quantum computing algorithms" --provider deepseek
+
+# Anthropic
 export OPENAI_API_KEY="sk-ant-..."
-deep-researcher "CRISPR gene editing efficiency" --model claude-sonnet-4-20250514
+deep-researcher "climate modeling" --provider anthropic
+
+# OpenRouter (access 100+ models)
+export OPENAI_API_KEY="sk-or-..."
+deep-researcher "protein folding" --provider openrouter
+
+# LMStudio (local)
+deep-researcher "robotics control" --provider lmstudio
+
+# Together AI
+export OPENAI_API_KEY="..."
+deep-researcher "NLP transformers" --provider together
 ```
+
+Supported providers: `ollama`, `lmstudio`, `openai`, `anthropic`, `groq`, `deepseek`, `openrouter`, `together`
 
 ---
 
@@ -196,15 +213,36 @@ Create `~/.deep-researcher/config.json`:
 
 Priority: CLI args > environment variables > config file > defaults.
 
-### Recommended Models
+### Models & Compatibility
 
-| Provider | Model | Notes |
+Deep Researcher requires models with **function/tool calling** support. This is how the agent decides which databases to search.
+
+**Local models (Ollama / LMStudio):**
+
+| Model | Tool Calling | Quality | Notes |
+|---|---|---|---|
+| `llama3.1` | Yes | Good | Default. Solid all-around |
+| `llama3.3:70b` | Yes | Excellent | Best local quality (needs 48GB+ VRAM) |
+| `qwen2.5:14b` | Yes | Excellent | Best quality/size ratio for local |
+| `qwen2.5-coder:32b` | Yes | Excellent | Strong structured output |
+| `gemma3:12b` | Yes | Good | Lightweight alternative |
+| `mistral-nemo` | Yes | Good | Fast |
+| `deepseek-r1` | **No** | - | Does NOT support tool calling |
+| `llama3.2:3b` | **No** | - | Too small for reliable tool use |
+
+**Cloud providers:**
+
+| Provider | Recommended Model | Notes |
 |---|---|---|
-| Ollama | `llama3.1` | Good function calling, runs locally |
-| Ollama | `qwen2.5:14b` | Excellent function calling |
 | OpenAI | `gpt-4o` | Best overall quality |
-| OpenAI | `gpt-4o-mini` | Good speed/quality balance |
+| OpenAI | `gpt-4o-mini` | Good speed/cost balance |
 | Anthropic | `claude-sonnet-4-20250514` | Excellent synthesis |
+| Groq | `llama-3.3-70b-versatile` | Fast, free tier available |
+| DeepSeek | `deepseek-chat` | Good quality, affordable |
+| Together | `Llama-3.3-70B-Instruct-Turbo` | Fast inference |
+| OpenRouter | Any tool-calling model | Access 100+ models |
+
+> **If you get a "function calling not supported" error**, your model doesn't support tool use. Switch to one of the models listed above.
 
 ---
 
