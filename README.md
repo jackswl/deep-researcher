@@ -1,7 +1,6 @@
 <div align="center">
   <h1>
-    <img src="assets/logo.svg" width="64" alt="Deep Researcher" align="absmiddle">
-    Deep Researcher
+    <img src="assets/logo.svg" width="64" alt="Deep Researcher" align="absmiddle">&nbsp;&nbsp;Deep Researcher
   </h1>
   <p>
     <strong>An agentic academic research assistant that searches 8 databases (open and paywalled), follows citation chains, and writes structured literature reviews.</strong>
