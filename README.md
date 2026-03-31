@@ -1,6 +1,5 @@
 <p align="center">
-  <br>
-  <img src="assets/logo.svg" width="48" alt="">&nbsp;&nbsp;&nbsp;&nbsp;<img src="assets/logo-right.svg" width="48" alt="">
+  <img src="assets/logo.svg" width="72" alt="Deep Researcher">
   <h1 align="center">Deep Researcher</h1>
   <p align="center">
     <strong>An agentic academic research assistant that searches 8 databases (open and paywalled), follows citation chains, and writes structured literature reviews.</strong>
