@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <g transform="translate(64,0) scale(-1,1)">
+    <!-- Spikes (orange, Claude's color) -->
+    <path d="M32,1 L35,17 L29,17 Z" fill="#ea580c"/>
+    <path d="M21,4 L26,18 L18,16 Z" fill="#ea580c"/>
+    <path d="M43,4 L46,16 L38,18 Z" fill="#ea580c"/>
+    <path d="M12,11 L19,22 L11,21 Z" fill="#c2410c"/>
+    <path d="M52,11 L53,21 L45,22 Z" fill="#c2410c"/>
+    <path d="M7,21 L14,28 L6,29 Z" fill="#9a3412"/>
+    <path d="M57,21 L58,29 L50,28 Z" fill="#9a3412"/>
+    <!-- Body -->
+    <circle cx="32" cy="38" r="23" fill="#1a1a2e"/>
+    <!-- Face area -->
+    <ellipse cx="32" cy="40" rx="16" ry="13" fill="#16162a"/>
+    <!-- Eyes (glowing orange) -->
+    <circle cx="24" cy="36" r="4.5" fill="#ea580c" opacity="0.9"/>
+    <circle cx="40" cy="36" r="4.5" fill="#ea580c" opacity="0.9"/>
+    <circle cx="25" cy="35" r="1.8" fill="#fff"/>
+    <circle cx="41" cy="35" r="1.8" fill="#fff"/>
+    <!-- Nose -->
+    <ellipse cx="32" cy="44" rx="2.5" ry="2" fill="#444"/>
+    <!-- Smirk -->
+    <path d="M27,48 Q32,52 37,48" fill="none" stroke="#ea580c" stroke-width="1.2" stroke-linecap="round" opacity="0.7"/>
+  </g>
+</svg>
