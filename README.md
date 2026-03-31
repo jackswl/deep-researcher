@@ -7,11 +7,11 @@
 </p>
 
 <p align="center">
-  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/dependencies-3-brightgreen.svg" alt="Dependencies: 3">
-  <img src="https://img.shields.io/badge/lines_of_code-~1.5K-blue.svg" alt="LOC: ~1.5K">
-  <img src="https://img.shields.io/badge/databases-8-orange.svg" alt="Databases: 8">
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg?style=flat-square" alt="Python 3.10+"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat-square" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/dependencies-3-brightgreen.svg?style=flat-square" alt="Dependencies: 3">
+  <img src="https://img.shields.io/badge/lines_of_code-~1.5K-blue.svg?style=flat-square" alt="LOC: ~1.5K">
+  <img src="https://img.shields.io/badge/databases-8-orange.svg?style=flat-square" alt="Databases: 8">
 </p>
 
 <p align="center">
@@ -35,6 +35,8 @@ It runs a real agentic loop where the LLM decides what to search next, when to d
 
 ---
 
+<br>
+
 ## Why This Exists
 
 Existing tools like GPT Researcher, STORM, Gemini Deep Research, and ChatGPT all rely on **web search**. They write you a narrative essay with a few citations sprinkled in. That's useful for a quick overview, but not for an actual literature review.
@@ -56,6 +58,8 @@ Built for **academics, grad students, and researchers** who need:
 > Unlike Gemini or ChatGPT deep research, Deep Researcher doesn't give you a narrative with a few sources. It builds a **complete paper corpus**, categorizes by theme, synthesizes across groups, and identifies gaps. Think Connected Papers + automated analysis.
 
 ---
+
+<br>
 
 ## Quick Start
 
@@ -152,6 +156,8 @@ deep-researcher "robotics control" --provider lmstudio
 
 ---
 
+<br>
+
 ## What You Get
 
 Each session produces four files:
@@ -165,6 +171,8 @@ output/2026-03-31-142315-transformer-structural-health/
 ```
 
 ---
+
+<br>
 
 ## Sample Output
 
@@ -211,6 +219,8 @@ dominant yet. Transfer learning is the most common strategy across all groups.
 > Every paper found appears in a category table. Every paper is in the references. No paper is invented.
 
 ---
+
+<br>
 
 ## How It Works
 
@@ -287,6 +297,8 @@ These two flags control how thorough the research is. Think of it like adjusting
 
 ---
 
+<br>
+
 ## Academic Databases
 
 | Tool | Source | Papers | What It Covers |
@@ -307,6 +319,8 @@ These two flags control how thorough the research is. Think of it like adjusting
 
 ---
 
+<br>
+
 ## Usage
 
 ```
@@ -326,6 +340,8 @@ Options:
 ```
 
 ---
+
+<br>
 
 ## Configuration
 
@@ -365,6 +381,8 @@ Priority: CLI args > environment variables > config file > defaults.
 </details>
 
 ---
+
+<br>
 
 ## Models & Compatibility
 
@@ -407,6 +425,8 @@ Priority: CLI args > environment variables > config file > defaults.
 
 ---
 
+<br>
+
 ## How It Compares
 
 | | GPT Researcher | STORM | local-deep-research | **Deep Researcher** |
@@ -424,6 +444,8 @@ Priority: CLI args > environment variables > config file > defaults.
 | Paid APIs required | Yes (Tavily) | Yes | Yes (SearXNG) | **No** |
 
 ---
+
+<br>
 
 ## Extending
 
@@ -453,6 +475,8 @@ class MyDatabaseTool(Tool):
 Register it in `src/deep_researcher/tools/__init__.py` and it's immediately available to the agent.
 
 ---
+
+<br>
 
 ## How This Was Built
 
@@ -490,6 +514,8 @@ The entire project (architecture study, implementation, this README) was built i
 
 ---
 
+<br>
+
 ## Project Structure
 
 ```
@@ -515,6 +541,8 @@ src/deep_researcher/
 ```
 
 ---
+
+<br>
 
 ## License
 
