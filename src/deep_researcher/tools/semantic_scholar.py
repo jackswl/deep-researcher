@@ -108,16 +108,16 @@ class GetCitationsTool(Tool):
 
 
 def _request_with_retry(url: str, params: dict, max_retries: int = 3) -> httpx.Response:
+    resp = None
     for attempt in range(max_retries):
         resp = httpx.get(url, params=params, timeout=30)
         if resp.status_code in _NON_RETRIABLE_STATUSES:
             return resp
         if resp.status_code in _RETRIABLE_STATUSES:
-            wait = 2 ** (attempt + 1)
-            time.sleep(wait)
+            time.sleep(2 ** (attempt + 1))
             continue
         return resp
-    return resp
+    return resp  # type: ignore[return-value]
 
 
 def _parse_s2_paper(data: dict) -> Paper:

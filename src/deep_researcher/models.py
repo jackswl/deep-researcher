@@ -96,9 +96,12 @@ class Paper:
                 parts = self.authors[0].split()
                 author_part = parts[-1].lower() if parts else "unknown"
             year_part = str(self.year) if self.year else "nd"
-            title_part = ""
-            if self.title and self.title.split():
-                title_part = re.sub(r"[^a-z]", "", self.title.split()[0].lower())
+            title_part = "untitled"
+            if self.title:
+                words = self.title.split()
+                if words:
+                    cleaned = re.sub(r"[^a-z]", "", words[0].lower())
+                    title_part = cleaned or "untitled"
             key = f"{author_part}{year_part}{title_part}"
 
         entry_type = "article" if self.journal else "misc"

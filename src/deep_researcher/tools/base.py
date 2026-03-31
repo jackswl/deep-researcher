@@ -61,7 +61,7 @@ class ToolRegistry:
 
     def execute_concurrent(self, tool_calls: list[dict]) -> list[tuple[str, ToolResult]]:
         """Execute multiple read-only tool calls concurrently (Claude Code pattern)."""
-        results: list[tuple[str, ToolResult]] = [("", ToolResult(text=""))] * len(tool_calls)
+        results: list[tuple[str, ToolResult]] = [("", ToolResult(text="")) for _ in tool_calls]
 
         with ThreadPoolExecutor(max_workers=5) as executor:
             futures = {}
