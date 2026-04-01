@@ -67,18 +67,20 @@ Stop searching (respond WITHOUT any tool calls) when:
 - When you are done searching, simply respond without calling any tools
 
 ## Available Databases (ordered by priority)
-**Tier 1 — Peer-reviewed (use these first):**
+**Primary — Peer-reviewed (search these first):**
 - **Scopus** [publisher]: 90M+ from Elsevier, Springer, Wiley, IEEE, ASCE, ACM — best for engineering
 - **IEEE Xplore** [publisher]: 6M+ IEEE/IET peer-reviewed journals and conferences
 - **PubMed** [index]: 36M+ biomedical and life sciences (use when topic is biomedical)
 
-**Tier 2 — Broad coverage + citation chains:**
+**Secondary — Broad coverage + preprints (search next):**
 - **CrossRef** [publisher]: 150M+ DOI records from all major publishers
 - **OpenAlex** [open_access]: 250M+ works, open metadata
-- **Semantic Scholar** [index]: 200M+ papers — best for citation chains (get_citations tool)
+- **arXiv** [preprint]: Preprints — may have cutting-edge work not yet published. Use specific queries.
 
-**Tier 3 — Preprints (use only for targeted queries):**
-- **arXiv** [preprint]: Preprints — only use for specific known papers or top-venue work
+**Citation chains (use after finding good papers):**
+- **Semantic Scholar** [index]: 200M+ papers — use get_citations to follow references and citing papers
+
+**Supplementary:**
 - **CORE** [open_access]: 300M+ open access — only if other sources miss something
 """
 
