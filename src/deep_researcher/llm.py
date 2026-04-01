@@ -79,6 +79,43 @@ class LLMClient:
                     raise
         raise last_error  # type: ignore[misc]
 
+    def chat_no_think(self, messages: list[dict]) -> str:
+        """Chat without thinking mode (for Ollama local models).
+
+        Uses Ollama's native API with think:false to suppress reasoning tokens.
+        Falls back to the standard OpenAI-compatible chat if not running locally.
+        """
+        # Only use native API for local Ollama/LMStudio
+        if "localhost" not in self.client.base_url.host and "127.0.0.1" not in self.client.base_url.host:
+            response = self.chat(messages)
+            return response.content or ""
+
+        import httpx as _httpx
+        # Convert to Ollama native format
+        base = str(self.client.base_url).replace("/v1", "").rstrip("/")
+        ollama_messages = [{"role": m["role"], "content": m["content"]} for m in messages]
+
+        last_error = None
+        for attempt in range(self._max_retries):
+            try:
+                resp = _httpx.post(
+                    f"{base}/api/chat",
+                    json={"model": self.model, "messages": ollama_messages, "stream": False, "think": False},
+                    timeout=float(self.client.timeout),
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return data.get("message", {}).get("content", "")
+            except _httpx.TimeoutException as e:
+                last_error = e
+                time.sleep(2 ** attempt)
+            except _httpx.HTTPError as e:
+                last_error = e
+                if hasattr(e, 'response') and e.response and e.response.status_code < 500:
+                    raise
+                time.sleep(2 ** attempt)
+        raise RuntimeError(f"chat_no_think failed after {self._max_retries} retries: {last_error}")
+
     @staticmethod
     def estimate_tokens(messages: list[dict]) -> int:
         """Rough token estimate for message list (Claude Code proactive blocking pattern)."""

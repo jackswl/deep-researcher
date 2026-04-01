@@ -29,15 +29,17 @@ You are a research paper collector. Your ONLY job right now is to find as many r
 papers as possible on the given topic. Do NOT write a report. Just search.
 {year_note}
 ## Strategy — Quality First, Precise Queries
-1. **Start with peer-reviewed sources:** Search Scopus, Semantic Scholar, IEEE Xplore, \
-and PubMed FIRST. These index curated, peer-reviewed literature.
-2. Then broaden to CrossRef and OpenAlex for additional coverage.
-3. Use arXiv and CORE only for **specific, targeted queries** — NOT broad topic searches. \
-These are unvetted and return noise on broad queries.
-4. Break the topic into {config.breadth} different search angles using varied terminology.
-5. When you find highly-cited papers (>50 citations), follow their citation chains.
-6. Use get_paper_details on papers that appear in multiple databases.
-7. Look for survey/review papers — they reference dozens of other relevant papers.
+1. **Start with Scopus and IEEE Xplore** — these are the primary sources for peer-reviewed \
+engineering and CS literature. Search these FIRST with your best queries.
+2. **Then PubMed** if the topic has biomedical/health relevance.
+3. **Then CrossRef and OpenAlex** for additional publisher coverage.
+4. **Use Semantic Scholar primarily for citation chains** — after finding good papers in \
+Scopus/IEEE, use get_citations to follow their references and citing papers.
+5. **arXiv and CORE last** — ONLY for specific, targeted queries (e.g., a known preprint). \
+Do NOT use broad queries on arXiv — it returns noise.
+6. Break the topic into {config.breadth} different search angles using varied terminology.
+7. Use get_paper_details on papers that appear in multiple databases.
+8. Look for survey/review papers — they reference dozens of other relevant papers.
 
 ## CRITICAL: Query Formulation
 - Use **specific multi-word phrases**, not single keywords
@@ -64,27 +66,26 @@ Stop searching (respond WITHOUT any tool calls) when:
 - Do NOT write any analysis or report yet — just search
 - When you are done searching, simply respond without calling any tools
 
-## Available Databases (ordered by quality)
-**Tier 1 — Peer-reviewed / Curated:**
-- **Scopus** [publisher]: 90M+ records from major publishers — best for quality peer-reviewed papers
-- **Semantic Scholar** [index]: 200M+ papers, citation counts, TLDR summaries
-- **IEEE Xplore** [publisher]: 6M+ IEEE/IET peer-reviewed engineering and CS papers
-- **PubMed** [index]: 36M+ curated biomedical and life sciences
+## Available Databases (ordered by priority)
+**Tier 1 — Peer-reviewed (use these first):**
+- **Scopus** [publisher]: 90M+ from Elsevier, Springer, Wiley, IEEE, ASCE, ACM — best for engineering
+- **IEEE Xplore** [publisher]: 6M+ IEEE/IET peer-reviewed journals and conferences
+- **PubMed** [index]: 36M+ biomedical and life sciences (use when topic is biomedical)
 
-**Tier 2 — Broad coverage:**
-- **CrossRef** [publisher]: 150M+ records from Elsevier, Springer, IEEE, Wiley
-- **OpenAlex** [open_access]: 250M+ works, fully open metadata
+**Tier 2 — Broad coverage + citation chains:**
+- **CrossRef** [publisher]: 150M+ DOI records from all major publishers
+- **OpenAlex** [open_access]: 250M+ works, open metadata
+- **Semantic Scholar** [index]: 200M+ papers — best for citation chains (get_citations tool)
 
-**Tier 3 — Preprints / Open access (not peer-reviewed):**
-- **arXiv** [preprint]: Preprints in CS, physics, math, engineering, biology
-- **CORE** [open_access]: 300M+ open access articles
+**Tier 3 — Preprints (use only for targeted queries):**
+- **arXiv** [preprint]: Preprints — only use for specific known papers or top-venue work
+- **CORE** [open_access]: 300M+ open access — only if other sources miss something
 """
 
 
-# --- Multi-step synthesis prompts (STORM-inspired + Claude Code token budgeting) ---
+# --- Synthesis prompts ---
 
 _CATEGORIZE_PROMPT = """\
-/no_think
 You are a research librarian. Below are {count} papers on: "{query}"
 
 Assign each paper to exactly one category (3-6 categories). \
@@ -157,6 +158,61 @@ Rules:
 - Be direct and specific — no vague generalities
 - Reference specific paper numbers when possible
 - Do NOT repeat the per-category analysis
+"""
+
+_SYNTHESIS_PROMPT = """\
+You are a research analyst. Below is a corpus of {count} papers found across {db_count} \
+academic databases on the topic: "{query}"
+
+Your job: **categorize these papers and synthesize findings across categories.** \
+Not a story. Not a history lesson. A structured analysis.
+
+## The Paper Corpus
+
+{corpus}
+
+## Output Format
+
+### {query}
+
+#### Coverage
+One line: how many papers, which databases, what year range.
+
+#### Categories
+
+For each category you identify (typically 3-6 categories):
+
+##### Category Name (N papers)
+**What this group does:** 1-2 sentences describing the shared approach/theme.
+**Key methods:** List the specific methods/techniques used across papers in this group.
+**Main findings:** What do papers in this group collectively show? Where do they agree? Disagree?
+**Limitations:** What are the common weaknesses across this group?
+
+| Ref | Paper | Year | Method | Key Finding | Citations |
+|-----|-------|------|--------|-------------|-----------|
+| [N] | Author et al. | Year | Approach | Result | Count |
+
+(List ALL papers in this category in the table, not just the top ones)
+
+#### Cross-Category Patterns
+What patterns emerge across categories? Which categories are converging? \
+What contradictions exist between groups? Which papers bridge multiple categories?
+
+#### Gaps & Opportunities
+Be specific. Name concrete research questions that nobody has addressed. \
+Point to specific combinations of methods/domains that haven't been tried.
+
+#### Open Access Papers
+List papers with free full-text versions available (if any were found).
+
+## Rules
+- EVERY paper in the corpus must appear in at least one category table
+- Categorize by approach/theme, NOT by database source
+- Synthesize ACROSS papers — don't summarize each paper individually
+- Be direct. No filler. No "In recent years..." No hedging.
+- If papers contradict each other, say so explicitly
+- Do NOT invent papers that aren't in the corpus above
+- Do NOT write a References section — it will be appended automatically
 """
 
 
@@ -527,7 +583,7 @@ class ResearchAgent:
 
         # Cap corpus — sort by quality tier then citations
         _MAX_SYNTHESIS_PAPERS = 200
-        _TIER1_SOURCES = {"scopus", "semantic_scholar", "ieee", "pubmed"}
+        _TIER1_SOURCES = {"scopus", "ieee", "pubmed"}
         all_papers = self.papers
 
         def _paper_sort_key(p: Paper) -> tuple:
@@ -565,12 +621,18 @@ class ResearchAgent:
             if not cat_papers:
                 continue
             self.console.print(f"    [cyan]{cat_name}[/cyan] ({len(cat_papers)} papers)...")
-            # Circuit breaker: skip category on failure
+            # Circuit breaker: skip category on failure, with hard 5 min timeout
             try:
-                section = self._synthesize_category(query, cat_name, cat_papers)
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(self._synthesize_category, query, cat_name, cat_papers)
+                    section = future.result(timeout=300)  # 5 min — thinking mode needs time
                 category_sections.append((cat_name, section))
+            except concurrent.futures.TimeoutError:
+                self.console.print(f"    [red]Timed out after 5 min — skipping[/red]")
+                continue
             except Exception as e:
-                self.console.print(f"    [red]Failed: {e} — skipping category[/red]")
+                self.console.print(f"    [red]Failed: {e} — skipping[/red]")
                 continue
 
         if not category_sections:
@@ -590,7 +652,7 @@ class ResearchAgent:
         Processes papers in groups of 50 to stay within local model limits,
         then merges category assignments across batches.
         """
-        _BATCH_SIZE = 40
+        _BATCH_SIZE = 20
         all_categories: dict[str, list[int]] = {}
 
         for batch_start in range(0, len(papers), _BATCH_SIZE):
@@ -616,11 +678,12 @@ class ResearchAgent:
 
             try:
                 self.console.print(f"    [dim]Batch {batch_start + 1}-{batch_end} of {len(papers)}...[/dim]")
-                response = self.llm.chat([
+                # Use no-think mode for categorization (mechanical task, no reasoning needed)
+                content = self.llm.chat_no_think([
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": "Categorize these papers now."},
                 ])
-                batch_cats = _parse_categories(response.content or "", len(papers))
+                batch_cats = _parse_categories(content, len(papers))
                 # Merge into overall categories
                 for cat_name, indices in batch_cats.items():
                     if cat_name in all_categories:
