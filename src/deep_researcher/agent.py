@@ -459,8 +459,8 @@ class ResearchAgent:
             self.console.print("  [yellow]No extracted terms — skipping systematic search[/yellow]")
             return
 
-        # Get search tools (exclude unreliable/utility tools)
-        _EXCLUDED = {"search_core", "search_semantic_scholar"}  # S2 rate-limits aggressively without API key
+        # Get search tools (exclude supplementary/utility tools)
+        _EXCLUDED = {"search_core"}  # CORE is supplementary, not worth systematic sweep
         search_tools = [
             t for t in self.registry.all()
             if t.name.startswith("search_") and t.name not in _EXCLUDED
@@ -534,9 +534,13 @@ class ResearchAgent:
         self.console.print("\n[bold blue]Phase 1: Systematic database sweep...[/bold blue]")
         self._systematic_search(query)
 
-        # === PHASE 2: LLM-driven search (gaps, citations, creative angles) ===
-        self.console.print(f"\n[bold blue]Phase 2: LLM-driven search ({len(self.papers)} papers so far)...[/bold blue]")
+        # === PHASE 2: LLM-driven search (short — gaps only, sweep already covered main space) ===
+        _LLM_SEARCH_ITERS = min(3, self.config.max_iterations)
+        saved_max = self.config.max_iterations
+        self.config.max_iterations = _LLM_SEARCH_ITERS
+        self.console.print(f"\n[bold blue]Phase 2: LLM gap-fill search ({len(self.papers)} papers, max {_LLM_SEARCH_ITERS} iterations)...[/bold blue]")
         self._search_phase(query)
+        self.config.max_iterations = saved_max
 
         # === PHASE 3: Synthesize (categorize + analyze) ===
         self.console.print(f"\n[bold blue]Phase 3: Synthesizing {len(self.papers)} papers...[/bold blue]")
