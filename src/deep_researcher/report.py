@@ -46,13 +46,13 @@ def save_report(
     header = "\n".join(header_lines) + "\n\n"
 
     report_path = os.path.join(folder, "report.md")
-    with open(report_path, "w") as f:
+    with open(report_path, "w", encoding="utf-8") as f:
         f.write(header + report_text)
 
     # BibTeX with header
     bibtex_path = os.path.join(folder, "references.bib")
     seen_keys: set[str] = set()
-    with open(bibtex_path, "w") as f:
+    with open(bibtex_path, "w", encoding="utf-8") as f:
         f.write(f"% Bibliography exported by Deep Researcher\n")
         f.write(f"% Generated: {datetime.now().strftime('%Y-%m-%d')}\n")
         f.write(f"% Total entries: {len(papers)}\n\n")
@@ -73,7 +73,7 @@ def save_report(
     # Full JSON with all fields
     papers_path = os.path.join(folder, "papers.json")
     papers_list = [p.to_dict() for p in papers.values() if p.title]
-    with open(papers_path, "w") as f:
+    with open(papers_path, "w", encoding="utf-8") as f:
         json.dump(papers_list, f, indent=2, ensure_ascii=False)
 
     # CSV export (for Excel/spreadsheet users)
@@ -92,7 +92,7 @@ def save_report(
 
     # Research metadata
     meta_path = os.path.join(folder, "metadata.json")
-    with open(meta_path, "w") as f:
+    with open(meta_path, "w", encoding="utf-8") as f:
         json.dump({
             "query": query,
             "generated": datetime.now().isoformat(),
@@ -115,7 +115,7 @@ def save_checkpoint(papers: dict[str, Paper], folder: str) -> None:
     os.makedirs(folder, exist_ok=True)
     papers_path = os.path.join(folder, "papers.json")
     papers_list = [p.to_dict() for p in papers.values() if p.title]
-    with open(papers_path, "w") as f:
+    with open(papers_path, "w", encoding="utf-8") as f:
         json.dump(papers_list, f, indent=2, ensure_ascii=False)
 
 
