@@ -427,11 +427,10 @@ class ResearchAgent:
         """Extract METHOD and DOMAIN term groups from the query via LLM."""
         self.console.print("[dim]Extracting search terms...[/dim]")
         try:
-            response = self.llm.chat([
+            text = self.llm.chat_no_think([
                 {"role": "system", "content": _EXTRACT_TERMS_PROMPT.format(query=query)},
                 {"role": "user", "content": "Extract the terms now."},
             ])
-            text = response.content or ""
             for line in text.strip().split("\n"):
                 line = line.strip()
                 if line.upper().startswith("METHOD"):
