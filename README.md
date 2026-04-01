@@ -10,7 +10,7 @@
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg?style=flat-square" alt="Python 3.10+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat-square" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/dependencies-3-brightgreen.svg?style=flat-square" alt="Dependencies: 3">
-  <img src="https://img.shields.io/badge/lines_of_code-~1.5K-blue.svg?style=flat-square" alt="LOC: ~1.5K">
+  <img src="https://img.shields.io/badge/lines_of_code-~2.3K-blue.svg?style=flat-square" alt="LOC: ~2.3K">
   <img src="https://img.shields.io/badge/databases-8-orange.svg?style=flat-square" alt="Databases: 8">
 </p>
 
@@ -28,7 +28,7 @@ Most "AI research tools" search the web and write you a story. Deep Researcher d
 
 It runs a real agentic loop where the LLM decides what to search next, when to dig deeper, and when to stop. Not a pipeline. Not a single prompt. An autonomous research agent.
 
-**3 dependencies. ~1,500 lines. No LangChain.**
+**3 dependencies. ~2,300 lines. No LangChain.**
 
 > [!NOTE]
 > Deep Researcher searches **real academic databases** (Semantic Scholar, OpenAlex, arXiv, CrossRef, PubMed, CORE, Scopus, IEEE Xplore), not the open web. It accesses both open access and paywalled sources through their free APIs (abstracts and metadata are always available, no subscription needed). Every paper it finds actually exists. No hallucinated sources.
@@ -48,8 +48,10 @@ Built for **academics, grad students, and researchers** who need:
 - **Comprehensive coverage** across 8 academic databases, including paywalled publishers via Scopus and IEEE
 - **Literature gathering first, storytelling second.** Every paper found, categorized, and cited.
 - Citation chains to find foundational and recent work
-- BibTeX output ready for LaTeX/Overleaf
+- Date range filtering to focus on specific time periods
+- BibTeX + CSV output ready for LaTeX/Overleaf or Excel
 - Open access detection for paywalled papers
+- Interactive query refinement before spending API calls
 - A tool they can run **100% locally** with their own models
 
 > [!TIP]
@@ -154,15 +156,18 @@ deep-researcher "robotics control" --provider lmstudio
 
 ## What You Get
 
-Each session produces four files:
+Each session produces five files:
 
 ```
 output/2026-03-31-142315-transformer-structural-health/
 ├── report.md        # Categorized literature review with synthesis
 ├── references.bib   # Deduplicated BibTeX (import into LaTeX/Overleaf)
 ├── papers.json      # Full metadata for every paper found
+├── papers.csv       # Same data as CSV (open in Excel/Sheets)
 └── metadata.json    # Research stats: databases, coverage, year range
 ```
+
+> `papers.json` is also saved as a **checkpoint** after each search iteration, so even interrupted runs preserve partial results.
 
 ---
 
@@ -219,21 +224,29 @@ dominant yet. Transfer learning is the most common strategy across all groups.
 │                  YOUR RESEARCH QUESTION                 │
 └────────────────────────┬────────────────────────────────┘
                          │
+               (optional: --interactive)
+              ┌──────────▼──────────┐
+              │  CLARIFY: 3 focused │
+              │  questions to       │
+              │  refine the query   │
+              └──────────┬──────────┘
+                         │
           ┌──────────────▼──────────────┐
           │   Phase 1-2: SEARCH AGENT   │
           │                             │
           │  ┌─── arXiv ────────────┐   │
-          │  ├─── Semantic Scholar ─┤   │
-          │  ├─── OpenAlex ─────────┤   │    The LLM decides
-          │  ├─── CrossRef ─────────┤   │    what to search,
-          │  ├─── PubMed ───────────┤ ► │    follows citations,
-          │  ├─── CORE ─────────────┤   │    and stops when it
-          │  ├─── Scopus ───────────┤   │    has enough papers
-          │  └─── IEEE Xplore ──────┘   │
-          │                             │
-          │  + Citation chain following │
-          │  + Open access detection    │
-          │  + Concurrent execution     │
+          │  ├─── Semantic Scholar ─┤   │  The LLM decides
+          │  ├─── OpenAlex ─────────┤   │  what to search,
+          │  ├─── CrossRef ─────────┤   │  follows citations,
+          │  ├─── PubMed ───────────┤ ► │  and stops when it
+          │  ├─── CORE ─────────────┤   │  has enough papers.
+          │  ├─── Scopus ───────────┤   │
+          │  └─── IEEE Xplore ──────┘   │  Between iterations:
+          │                             │  reflects on gaps,
+          │  + Citation chain following │  adapts strategy
+          │  + Open access detection    │  (broad → focused
+          │  + Concurrent execution     │   → gap-filling)
+          │  + Checkpoint saves         │
           └──────────────┬──────────────┘
                          │
               Structured paper corpus
@@ -254,7 +267,7 @@ dominant yet. Transfer learning is the most common strategy across all groups.
                          │
           ┌──────────────▼──────────────┐
           │ report.md + references.bib  │
-          │ papers.json + metadata.json │
+          │ papers.json/csv + metadata  │
           └─────────────────────────────┘
 ```
 
@@ -284,6 +297,56 @@ These two flags control how thorough the research is. Think of it like adjusting
 
 > [!TIP]
 > Start with defaults. If the report feels thin, increase breadth. If it's missing foundational papers, increase depth.
+
+### Date Range Filtering: `--start-year` and `--end-year`
+
+Focus your research on a specific time period. Filters are applied at the API level where supported (Semantic Scholar, OpenAlex, CrossRef, PubMed, Scopus, IEEE), with a post-filter safety net on all tools.
+
+```bash
+# Only papers from 2020 onward
+deep-researcher "federated learning" --start-year 2020
+
+# Specific window
+deep-researcher "attention mechanisms" --start-year 2017 --end-year 2023
+```
+
+Papers with unknown publication dates are always kept. Citation chain results are not filtered (so you can still discover foundational work).
+
+### Interactive Mode: `--interactive`
+
+Ask the LLM to generate 3 clarifying questions before starting the search. Your answers are combined with the original query for more targeted results.
+
+```bash
+deep-researcher "machine learning in healthcare" --interactive
+```
+
+```
+Generating clarifying questions...
+
+1. Are you focused on diagnostics, treatment planning, or administrative applications?
+2. Any specific medical domain (cardiology, oncology, radiology, etc.)?
+3. Are you interested in deep learning specifically, or ML methods broadly?
+
+Answer each question (press Enter to skip):
+
+  1. > diagnostics and radiology
+  2. > oncology
+  3. >
+
+Enhanced query ready.
+```
+
+### Adaptive Search Strategy
+
+The search agent automatically adapts its strategy across iterations:
+
+| Phase | When | What the agent does |
+|---|---|---|
+| **Broad exploration** | First ~35% of iterations | Casts a wide net across databases with varied terminology |
+| **Focused drilling** | ~35-70% | Follows citation chains, narrows to specific methods and sub-topics |
+| **Gap-filling** | Last ~30% | Identifies underrepresented topics and fills specific gaps |
+
+Between each iteration, a reflection prompt tells the agent what databases it has used, how many papers it has found, and what phase it's in. This prevents the common failure mode where the agent keeps searching the same angle instead of exploring gaps.
 
 ---
 
@@ -319,10 +382,32 @@ Options:
   --api-key KEY          API key
   --breadth N            Search breadth: query angles (1-5, default: 3)
   --depth N              Search depth: citation rounds (0-5, default: 2)
+  --start-year YEAR      Filter papers published on or after this year
+  --end-year YEAR        Filter papers published on or before this year
+  --interactive          Ask clarifying questions before researching
   --max-iterations N     Max agentic loop iterations (default: 20)
   --output DIR           Output directory (default: ./output)
   --email EMAIL          Email for polite API access (recommended)
   --version              Show version
+```
+
+### Examples
+
+```bash
+# Basic usage
+deep-researcher "transformer models in structural health monitoring"
+
+# Focus on recent work only
+deep-researcher "large language models" --start-year 2023
+
+# Narrow to a specific time window
+deep-researcher "CRISPR gene editing" --start-year 2020 --end-year 2024
+
+# Interactive mode: refine your question first
+deep-researcher "machine learning in healthcare" --interactive
+
+# Combine flags
+deep-researcher "quantum computing" --provider openai --start-year 2022 --interactive
 ```
 
 ---
@@ -340,6 +425,8 @@ Create `~/.deep-researcher/config.json`:
   "api_key": "ollama",
   "email": "you@university.edu",
   "output_dir": "~/research/output",
+  "start_year": 2020,
+  "end_year": 2026,
   "scopus_api_key": "your-scopus-key",
   "ieee_api_key": "your-ieee-key",
   "core_api_key": "your-core-key"
@@ -358,6 +445,8 @@ Priority: CLI args > environment variables > config file > defaults.
 | `OPENAI_API_KEY` | `ollama` | API key |
 | `DEEP_RESEARCH_MAX_ITER` | `20` | Max iterations |
 | `DEEP_RESEARCH_EMAIL` | - | Email for polite API pool |
+| `DEEP_RESEARCH_START_YEAR` | - | Filter: papers from this year onward |
+| `DEEP_RESEARCH_END_YEAR` | - | Filter: papers up to this year |
 | `CORE_API_KEY` | - | Free key from [CORE](https://core.ac.uk/api-keys/register) |
 | `SCOPUS_API_KEY` | - | Free key from [Elsevier Dev](https://dev.elsevier.com/) |
 | `IEEE_API_KEY` | - | Free key from [IEEE Developer](https://developer.ieee.org/) |
@@ -417,9 +506,14 @@ Priority: CLI args > environment variables > config file > defaults.
 | Open access check | No | No | No | **Yes** |
 | Paper deduplication | No | No | No | **Yes** |
 | BibTeX output | No | No | No | **Yes** |
+| CSV export | No | No | No | **Yes** |
 | Categorized synthesis | No | No | No | **Yes** |
+| Date range filtering | No | No | No | **Yes** |
+| Reflection between iterations | No | No | No | **Yes** |
+| Interactive query refinement | No | No | No | **Yes** |
+| Checkpoint saves | No | No | No | **Yes** |
 | Dependencies | ~50+ | ~30+ | ~50+ | **3** |
-| Lines of code | ~15K | ~10K | ~15K | **~1.5K** |
+| Lines of code | ~15K | ~10K | ~15K | **~2.3K** |
 | Runs fully local | Partial | Partial | Yes | **Yes** |
 | Paid APIs required | Yes (Tavily) | Yes | Yes (SearXNG) | **No** |
 
@@ -435,6 +529,7 @@ from deep_researcher.models import Paper, ToolResult
 
 class MyDatabaseTool(Tool):
     name = "search_my_database"
+    category = "index"  # preprint, index, open_access, publisher, citation, or utility
     description = "Search My Database for ..."
     parameters = {
         "type": "object",
@@ -446,6 +541,8 @@ class MyDatabaseTool(Tool):
 
     def execute(self, query: str) -> ToolResult:
         papers = call_my_api(query)
+        # Year filtering is applied automatically via self._filter_by_year()
+        papers = self._filter_by_year(papers)
         text = format_results(papers)
         return ToolResult(text=text, papers=papers)
 ```
@@ -475,12 +572,21 @@ The result is Deep Researcher: a clean-room Python implementation that uses the 
 
 | Claude Code (TypeScript) | Deep Researcher (Python) |
 |---|---|
-| `queryLoop()` in `query.ts` | `_search_phase()` in `agent.py` |
-| `buildTool()` with schema + execute | `Tool` class + `execute()` → `ToolResult` |
+| `queryLoop()` in `query.ts` | `_search_phase()` with reflection prompts |
+| `buildTool()` with schema + execute | `Tool` class + category taxonomy + `execute()` → `ToolResult` |
 | `partitionToolCalls()` batching | `execute_partitioned()` via ThreadPoolExecutor |
 | `ToolResult<T>` with data + messages | `ToolResult` with text + papers |
 | `autoCompact` token-aware compression | `_compact_messages` with token estimation |
 | Exponential backoff + reactive recovery | Same, at both tool and LLM level |
+
+Patterns inspired by competitors (dzhng/deep-research, LangChain local-deep-researcher):
+
+| Pattern | Source | Implementation |
+|---|---|---|
+| Clarifying questions before research | dzhng/deep-research | `--interactive` mode with `clarify()` |
+| Reflection-driven gap analysis | LangChain local-deep-researcher | Phase-aware reflection prompts between iterations |
+| Breadth halving (broad → focused) | dzhng/deep-research | Three-phase strategy: broad → focused → gap-filling |
+| Checkpoint saves | LearningCircuit/local-deep-research | `papers.json` saved after each iteration |
 
 </details>
 
@@ -495,13 +601,13 @@ The entire project (architecture study, implementation, this README) was built i
 ```
 src/deep_researcher/
   __main__.py          # CLI entry point + provider presets
-  agent.py             # Two-phase research: search agent → synthesis agent
+  agent.py             # Search agent (with reflection) → synthesis agent
   llm.py               # OpenAI-compatible client with retry/recovery
   config.py            # Config file + env var + CLI loading
   models.py            # Paper (with dedup + merge) + ToolResult
-  report.py            # Report + BibTeX + JSON + metadata generation
+  report.py            # Report + BibTeX + JSON + CSV + checkpoint generation
   tools/
-    base.py            # Tool base class + partitioned concurrent registry
+    base.py            # Tool base class + taxonomy + year filter + registry
     arxiv_search.py    # arXiv API
     semantic_scholar.py # Semantic Scholar + citation chains
     openalex.py        # OpenAlex API
