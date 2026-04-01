@@ -304,26 +304,26 @@ def _build_paper_corpus(papers: dict[str, Paper]) -> str:
 
 _EXTRACT_TERMS_PROMPT = """\
 /no_think
-Given this research query, extract the key search term groups.
+Given this research query, extract key search term groups for academic database searching.
 
 Query: "{query}"
 
 Return exactly two groups:
-METHOD: comma-separated list of method/technique terms and their synonyms
-DOMAIN: comma-separated list of domain/application terms and their synonyms
+METHOD: comma-separated list of method/technique terms, their synonyms, AND specific sub-techniques
+DOMAIN: comma-separated list of domain/application terms and their synonyms (these are the CORE terms)
 
 Example for "transformer models in structural health monitoring":
-METHOD: transformer, attention mechanism, vision transformer, self-attention, ViT, encoder-decoder
+METHOD: transformer, attention mechanism, vision transformer, self-attention, ViT, encoder-decoder, deep learning, CNN-transformer, fine-tuning
 DOMAIN: structural health monitoring, SHM, damage detection, crack detection, structural integrity, structural assessment
 
-Example for "CRISPR gene editing in cancer therapy":
-METHOD: CRISPR, gene editing, Cas9, genome editing, CRISPR-Cas
-DOMAIN: cancer therapy, oncology, tumor treatment, cancer treatment, anti-cancer
+Example for "large language models for automated code compliance checking BIM":
+METHOD: large language model, LLM, NLP, GPT, BERT, fine-tuning, prompt engineering, RAG, retrieval augmented generation, deep learning
+DOMAIN: code compliance, building regulations, BIM, building information modeling, automated compliance checking
 
 Rules:
-- Include common synonyms and abbreviations for each group
-- METHOD = the technique/approach being studied
-- DOMAIN = the field/application area
+- METHOD: include the broad technique AND specific sub-techniques (e.g., for LLM: also include fine-tuning, prompt engineering, RAG, GPT, BERT)
+- DOMAIN: include the core field terms and common abbreviations
+- Include 8-12 method terms and 4-6 domain terms
 - Return ONLY the two lines, nothing else
 """
 
@@ -421,6 +421,66 @@ class ResearchAgent:
         else:
             self.console.print("  [yellow]Could not extract terms — relevance filter disabled[/yellow]")
 
+    def _systematic_search(self, query: str) -> None:
+        """Domain-anchored systematic sweep: method × domain combinations.
+
+        Searches all databases with every combination of extracted METHOD
+        and DOMAIN terms. The relevance filter catches noise from databases
+        with loose keyword matching (arXiv, OpenAlex).
+        """
+        if not self._method_terms or not self._domain_terms:
+            self.console.print("  [yellow]No extracted terms — skipping systematic search[/yellow]")
+            return
+
+        # Get search tools (exclude citation/utility tools — those are for the LLM phase)
+        search_tools = [
+            t for t in self.registry.all()
+            if t.name.startswith("search_") and t.name not in ("search_core",)
+        ]
+        if not search_tools:
+            return
+
+        tool_names = [t.name for t in search_tools]
+        self.console.print(f"  [dim]Databases: {', '.join(tool_names)}[/dim]")
+
+        total_combinations = len(self._method_terms) * len(self._domain_terms)
+        self.console.print(f"  [dim]{len(self._method_terms)} method × {len(self._domain_terms)} domain = {total_combinations} combinations[/dim]")
+
+        combo_count = 0
+        for domain_term in self._domain_terms:
+            for method_term in self._method_terms:
+                combo_count += 1
+                search_query = f"{method_term} {domain_term}"
+                papers_before = len(self.papers)
+
+                # Search all databases with this combination
+                for tool in search_tools:
+                    try:
+                        result = tool.execute(query=search_query, max_results=10)
+                        for paper in result.papers:
+                            self._track_paper(paper, query)
+                    except Exception:
+                        continue
+
+                new_papers = len(self.papers) - papers_before
+                if new_papers > 0:
+                    self.console.print(
+                        f"  [cyan][{combo_count}/{total_combinations}][/cyan] "
+                        f"\"{method_term}\" + \"{domain_term}\" → +{new_papers} new"
+                    )
+
+        self.console.print(
+            f"  [green]Systematic sweep complete: {len(self.papers)} papers, "
+            f"{self._rejected_count} irrelevant filtered[/green]"
+        )
+
+        # Checkpoint after systematic search
+        if self.papers and self._output_folder:
+            try:
+                save_checkpoint(self.papers, self._output_folder)
+            except Exception:
+                pass
+
     def research(self, query: str) -> str:
         self.console.print(Panel(
             f"[bold]{query}[/bold]\n[dim]breadth={self.config.breadth}  depth={self.config.depth}  max_iter={self.config.max_iterations}[/dim]",
@@ -434,8 +494,12 @@ class ResearchAgent:
         # Extract search terms for relevance filtering
         self._extract_search_terms(query)
 
-        # === PHASE 1 & 2: Search (gather papers) ===
-        self.console.print("\n[bold blue]Phase 1-2: Searching databases...[/bold blue]")
+        # === PHASE 1: Systematic sweep (method × domain combinations) ===
+        self.console.print("\n[bold blue]Phase 1: Systematic database sweep...[/bold blue]")
+        self._systematic_search(query)
+
+        # === PHASE 2: LLM-driven search (gaps, citations, creative angles) ===
+        self.console.print(f"\n[bold blue]Phase 2: LLM-driven search ({len(self.papers)} papers so far)...[/bold blue]")
         self._search_phase(query)
 
         # === PHASE 3: Synthesize (categorize + analyze) ===
@@ -449,9 +513,20 @@ class ResearchAgent:
     def _search_phase(self, query: str) -> None:
         """Run the agentic search loop to collect papers."""
         search_prompt = _build_search_prompt(self.config)
+
+        # Tell the LLM what the systematic sweep already found
+        existing_note = ""
+        if self.papers:
+            existing_note = (
+                f"\n\nA systematic database sweep has already found {len(self.papers)} papers "
+                f"from {len(self._databases_used)} databases ({', '.join(sorted(self._databases_used))}). "
+                f"Your job now: search for papers the sweep MISSED — try creative query angles, "
+                f"follow citation chains for the top-cited papers, and look for survey/review papers."
+            )
+
         messages: list[dict] = [
             {"role": "system", "content": search_prompt},
-            {"role": "user", "content": f"Find all relevant papers on:\n\n{query}"},
+            {"role": "user", "content": f"Find all relevant papers on:\n\n{query}{existing_note}"},
         ]
         tool_schemas = self.registry.schemas()
         compact_failures = 0  # Circuit breaker (Claude Code pattern)
