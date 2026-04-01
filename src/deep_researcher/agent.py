@@ -113,28 +113,45 @@ Rules:
 """
 
 _CATEGORY_SYNTHESIS_PROMPT = """\
-You are a research analyst writing one section of a literature review on: "{query}"
+You are a research analyst writing one section of a detailed literature review on: "{query}"
 
 This section covers the category: **{category}** ({count} papers)
 
 ## Papers in this category
 {corpus}
 
-## Write this section with:
+## Write this section with DETAILED analysis. Reference papers by [number] throughout.
 
-**What this group does:** 1-2 sentences on the shared approach/theme.
-**Key methods:** Specific methods/techniques across papers.
-**Main findings:** What do papers collectively show? Agreements? Disagreements?
-**Limitations:** Common weaknesses.
+**What this group does:**
+Write a detailed paragraph (4-6 sentences) explaining the shared approach/theme.
+Reference individual papers: e.g., "Smith et al. [1] introduced X. Jones et al. [2] extended this by Y.
+Lee et al. [3] proposed a different approach using Z." Include specific contributions from each paper.
+
+**Key methods:**
+Write a detailed paragraph describing the specific methods and techniques.
+For each method, cite which paper(s) used it: e.g., "Neural semantic parsing [1], domain-specific
+fine-tuning on regulatory corpora [3], hybrid NLP-BIM integration [4]. Smith et al. [1] used
+first-order logic transformation, while Jones et al. [2] employed prompt engineering with chain-of-thought."
+
+**Main findings:**
+Write a detailed paragraph on collective findings. Include specific results where available:
+e.g., "Smith et al. [1] reported 92% accuracy on structured clauses but only 67% on conditional ones.
+Jones et al. [2] found that fine-tuning outperformed zero-shot by 23%." Note agreements and disagreements.
+
+**Limitations:**
+Write a paragraph on common weaknesses, citing specific papers where relevant.
 
 | Ref | Paper | Year | Method | Key Finding | Citations |
 |-----|-------|------|--------|-------------|-----------|
 (Include EVERY paper listed above in the table)
 
 Rules:
+- Be DETAILED — this is a literature review, not an abstract
+- Reference papers by [number] throughout ALL sections, not just the table
+- Include specific metrics, results, and comparisons where the abstracts mention them
 - Be direct. No filler. No "In recent years..."
 - Include ALL papers from this category in the table
-- Do NOT invent papers — only use what's listed above
+- Do NOT invent papers or results — only use what's in the abstracts above
 - Do NOT write references or cross-category analysis — just this one section
 """
 
