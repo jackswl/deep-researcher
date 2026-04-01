@@ -15,6 +15,7 @@ _RETRIABLE_STATUSES = {429, 500, 502, 503}
 class CoreSearchTool(Tool):
     name = "search_core"
     category = "open_access"
+    quality_tier = 3  # Open access aggregator — mixed quality
     description = (
         "Search CORE for open access academic papers. Covers 300M+ open access articles "
         "and metadata from repositories worldwide. Good for finding free full-text versions "

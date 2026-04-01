@@ -28,103 +28,124 @@ def _build_search_prompt(config: Config) -> str:
 You are a research paper collector. Your ONLY job right now is to find as many relevant \
 papers as possible on the given topic. Do NOT write a report. Just search.
 {year_note}
-## Strategy
-1. Break the topic into {config.breadth} different search angles using varied terminology
-2. Search at least 3 different databases per angle — use a mix of tool categories:
-   - **preprint** tools for cutting-edge work (arXiv)
-   - **index** tools for broad coverage (Semantic Scholar, PubMed)
-   - **open_access** tools for free full-text (OpenAlex, CORE)
-   - **publisher** tools for paywalled/established work (CrossRef, Scopus, IEEE)
-   - **citation** tools to follow reference chains
-3. When you find highly-cited papers (>50 citations), follow their citation chains
-4. Use get_paper_details on papers that appear in multiple databases
-5. Look for survey/review papers — they reference dozens of other relevant papers
+## Strategy — Quality First
+1. **Start with peer-reviewed sources:** Search Scopus, Semantic Scholar, IEEE Xplore, \
+and PubMed FIRST. These index curated, peer-reviewed literature.
+2. Then broaden to CrossRef and OpenAlex for additional coverage.
+3. Use arXiv and CORE last — for cutting-edge preprints and open access, but \
+note these are NOT peer-reviewed and may contain lower-quality work.
+4. Break the topic into {config.breadth} different search angles using varied terminology.
+5. When you find highly-cited papers (>50 citations), follow their citation chains.
+6. Use get_paper_details on papers that appear in multiple databases.
+7. Look for survey/review papers — they reference dozens of other relevant papers.
 
 ## When to Stop
 Stop searching (respond WITHOUT any tool calls) when:
-- You have found 20+ relevant papers
+- You have found 20+ relevant papers from peer-reviewed sources
 - New searches mostly return papers you already found
 - You have searched 3+ databases
 - You have followed citation chains for the top-cited papers
 
 ## Rules
-- Search aggressively — cast a wide net
+- **Quality over quantity** — 30 peer-reviewed papers beat 100 unvetted ones
+- Search aggressively but prioritize curated databases
 - Use different terminology across databases (different fields use different terms)
 - Prioritize recent work AND foundational papers
 - Do NOT write any analysis or report yet — just search
 - When you are done searching, simply respond without calling any tools
 
-## Available Databases
-- **arXiv** [preprint]: Preprints in CS, physics, math, engineering, biology
+## Available Databases (ordered by quality)
+**Tier 1 — Peer-reviewed / Curated:**
+- **Scopus** [publisher]: 90M+ records from major publishers — best for quality peer-reviewed papers
 - **Semantic Scholar** [index]: 200M+ papers, citation counts, TLDR summaries
-- **OpenAlex** [open_access]: 250M+ works, fully open metadata
+- **IEEE Xplore** [publisher]: 6M+ IEEE/IET peer-reviewed engineering and CS papers
+- **PubMed** [index]: 36M+ curated biomedical and life sciences
+
+**Tier 2 — Broad coverage:**
 - **CrossRef** [publisher]: 150M+ records from Elsevier, Springer, IEEE, Wiley
-- **PubMed** [index]: 36M+ biomedical and life sciences
+- **OpenAlex** [open_access]: 250M+ works, fully open metadata
+
+**Tier 3 — Preprints / Open access (not peer-reviewed):**
+- **arXiv** [preprint]: Preprints in CS, physics, math, engineering, biology
 - **CORE** [open_access]: 300M+ open access articles
-- **Scopus** [publisher]: 90M+ records from most major publishers (abstracts of paywalled papers too)
-- **IEEE Xplore** [publisher]: 6M+ IEEE/IET engineering and CS papers
 """
 
 
-# --- Synthesis prompt: categorize and synthesize from structured corpus ---
+# --- Multi-step synthesis prompts (STORM-inspired + Claude Code token budgeting) ---
 
-_SYNTHESIS_PROMPT = """\
-You are a research analyst. Below is a corpus of {count} papers found across {db_count} \
-academic databases on the topic: "{query}"
+_CATEGORIZE_PROMPT = """\
+You are a research librarian. Below are {count} papers on: "{query}"
 
-Your job: **categorize these papers and synthesize findings across categories.** \
-Not a story. Not a history lesson. A structured analysis.
+Assign each paper to exactly one category (3-6 categories). \
+Categorize by approach/theme, NOT by database or year.
 
-## The Paper Corpus
-
-{corpus}
+## Papers
+{paper_list}
 
 ## Output Format
+Return ONLY a list in this exact format (one line per category, paper numbers comma-separated):
 
-### {query}
+CATEGORY: Category Name
+PAPERS: 1, 5, 12, 23
 
-#### Coverage
-One line: how many papers, which databases, what year range.
+CATEGORY: Another Category
+PAPERS: 2, 7, 8, 19
 
-#### Categories
+Rules:
+- Every paper number must appear in exactly one category
+- 3-6 categories total
+- Category names should be specific (e.g., "Vision-Based Damage Detection", not "Methods")
+- No explanation needed — just the categories and paper numbers
+"""
 
-For each category you identify (typically 3-6 categories):
+_CATEGORY_SYNTHESIS_PROMPT = """\
+You are a research analyst writing one section of a literature review on: "{query}"
 
-##### Category Name (N papers)
-**What this group does:** 1-2 sentences describing the shared approach/theme.
-**Key methods:** List the specific methods/techniques used across papers in this group.
-**Main findings:** What do papers in this group collectively show? Where do they agree? Disagree?
-**Limitations:** What are the common weaknesses across this group?
+This section covers the category: **{category}** ({count} papers)
+
+## Papers in this category
+{corpus}
+
+## Write this section with:
+
+**What this group does:** 1-2 sentences on the shared approach/theme.
+**Key methods:** Specific methods/techniques across papers.
+**Main findings:** What do papers collectively show? Agreements? Disagreements?
+**Limitations:** Common weaknesses.
 
 | Ref | Paper | Year | Method | Key Finding | Citations |
 |-----|-------|------|--------|-------------|-----------|
-| [N] | Author et al. | Year | Approach | Result | Count |
+(Include EVERY paper listed above in the table)
 
-(List ALL papers in this category in the table, not just the top ones)
+Rules:
+- Be direct. No filler. No "In recent years..."
+- Include ALL papers from this category in the table
+- Do NOT invent papers — only use what's listed above
+- Do NOT write references or cross-category analysis — just this one section
+"""
+
+_CROSS_CATEGORY_PROMPT = """\
+You are a research analyst. You've categorized papers on "{query}" into these groups:
+
+{category_summaries}
+
+Now write ONLY these sections:
 
 #### Cross-Category Patterns
-What patterns emerge across categories? Which categories are converging? \
-What contradictions exist between groups? Which papers bridge multiple categories?
+What patterns emerge across categories? Which are converging? \
+What contradictions exist? Which papers bridge multiple categories?
 
 #### Gaps & Opportunities
-Be specific. Name concrete research questions that nobody has addressed. \
-Point to specific combinations of methods/domains that haven't been tried.
+Be specific. Name concrete research questions nobody has addressed. \
+Point to specific method/domain combinations that haven't been tried.
 
 #### Open Access Papers
-List papers with free full-text versions available (if any were found).
+List any papers with free full-text URLs mentioned above.
 
-#### References
-[N] Authors (Year). Title. *Journal*. DOI: xxx
-
-(Number every paper. Include ALL papers from the corpus, not just the ones you discuss.)
-
-## Rules
-- EVERY paper in the corpus must appear in at least one category table AND in References
-- Categorize by approach/theme, NOT by database source
-- Synthesize ACROSS papers — don't summarize each paper individually
-- Be direct. No filler. No "In recent years..." No hedging.
-- If papers contradict each other, say so explicitly
-- Do NOT invent papers that aren't in the corpus above
+Rules:
+- Be direct and specific — no vague generalities
+- Reference specific paper numbers when possible
+- Do NOT repeat the per-category analysis
 """
 
 
@@ -417,54 +438,210 @@ class ResearchAgent:
             self.console.print(f"\n[yellow]Reached iteration limit ({self.config.max_iterations}). Proceeding to synthesis with {len(self.papers)} papers.[/yellow]")
 
     def _synthesis_phase(self, query: str) -> str:
-        """Synthesize all collected papers into a categorized analysis."""
+        """Multi-step synthesis (STORM-inspired + Claude Code token budgeting).
+
+        Step 1: Categorize papers (lightweight — one-line per paper)
+        Step 2: Synthesize per category (token-budgeted paper injection)
+        Step 3: Cross-category analysis (works on summaries, not raw papers)
+        Step 4: Assemble report programmatically
+        """
         if not self.papers:
             return "No papers were found for this query."
 
-        # Cap synthesis corpus to prevent context overflow on smaller models
+        # Cap corpus — sort by quality tier then citations
         _MAX_SYNTHESIS_PAPERS = 200
+        _TIER1_SOURCES = {"scopus", "semantic_scholar", "ieee", "pubmed"}
         all_papers = self.papers
+
+        def _paper_sort_key(p: Paper) -> tuple:
+            # Tier 1 sources first, then by citations, then by year
+            sources = {s.strip() for s in p.source.split(",")}
+            has_tier1 = 0 if sources & _TIER1_SOURCES else 1
+            return (has_tier1, -(p.citation_count or 0), -(p.year or 0))
+
         if len(all_papers) > _MAX_SYNTHESIS_PAPERS:
-            # Take top papers by citation count, keeping all year ranges represented
-            sorted_all = sorted(
-                all_papers.values(),
-                key=lambda p: (-(p.citation_count or 0), -(p.year or 0)),
-            )
-            synthesis_papers = {p.unique_key: p for p in sorted_all[:_MAX_SYNTHESIS_PAPERS]}
+            sorted_all = sorted(all_papers.values(), key=_paper_sort_key)
+            synthesis_papers = sorted_all[:_MAX_SYNTHESIS_PAPERS]
             self.console.print(
-                f"  [yellow]Corpus capped: synthesizing top {_MAX_SYNTHESIS_PAPERS} of {len(all_papers)} papers "
-                f"(all {len(all_papers)} saved to papers.json)[/yellow]"
+                f"  [yellow]Corpus capped: synthesizing top {_MAX_SYNTHESIS_PAPERS} of "
+                f"{len(all_papers)} papers (all saved to papers.json)[/yellow]"
             )
         else:
-            synthesis_papers = all_papers
+            synthesis_papers = sorted(all_papers.values(), key=_paper_sort_key)
 
-        corpus = _build_paper_corpus(synthesis_papers)
+        # === Step 1: Categorize ===
+        self.console.print("  [cyan]Step 1/3: Categorizing papers...[/cyan]")
+        categories = self._categorize_papers(query, synthesis_papers)
+        if not categories:
+            self.console.print("  [yellow]Categorization failed — falling back to single-pass synthesis[/yellow]")
+            return self._fallback_synthesis(query, synthesis_papers)
 
-        extra_note = ""
-        if len(all_papers) > len(synthesis_papers):
-            extra_note = (
-                f"\n\nNote: {len(all_papers)} total papers were found, but only the top "
-                f"{len(synthesis_papers)} by citation count are shown above. "
-                f"The full corpus is available in papers.json."
-            )
+        self.console.print(f"  [green]Found {len(categories)} categories[/green]")
+        for name, indices in categories.items():
+            self.console.print(f"    {name}: {len(indices)} papers")
 
-        synthesis_prompt = _SYNTHESIS_PROMPT.format(
-            count=len(synthesis_papers),
-            db_count=len(self._databases_used),
+        # === Step 2: Per-category synthesis ===
+        self.console.print("  [cyan]Step 2/3: Synthesizing per category...[/cyan]")
+        category_sections: list[tuple[str, str]] = []
+        for cat_name, paper_indices in categories.items():
+            cat_papers = [synthesis_papers[i] for i in paper_indices if i < len(synthesis_papers)]
+            if not cat_papers:
+                continue
+            self.console.print(f"    [cyan]{cat_name}[/cyan] ({len(cat_papers)} papers)...")
+            # Circuit breaker: skip category on failure
+            try:
+                section = self._synthesize_category(query, cat_name, cat_papers)
+                category_sections.append((cat_name, section))
+            except Exception as e:
+                self.console.print(f"    [red]Failed: {e} — skipping category[/red]")
+                continue
+
+        if not category_sections:
+            self.console.print("  [yellow]All categories failed — falling back[/yellow]")
+            return self._fallback_synthesis(query, synthesis_papers)
+
+        # === Step 3: Cross-category analysis ===
+        self.console.print("  [cyan]Step 3/3: Cross-category analysis...[/cyan]")
+        cross_section = self._cross_category_analysis(query, category_sections)
+
+        # === Step 4: Assemble report ===
+        return self._assemble_report(query, synthesis_papers, categories, category_sections, cross_section)
+
+    def _categorize_papers(self, query: str, papers: list[Paper]) -> dict[str, list[int]]:
+        """Step 1: Assign papers to categories. Returns {category_name: [paper_indices]}."""
+        # Build lightweight one-line-per-paper list for categorization
+        lines = []
+        for i, p in enumerate(papers):
+            author = p.authors[0] if p.authors else "Unknown"
+            if len(p.authors) > 1:
+                author += " et al."
+            year = p.year or "n.d."
+            cites = f", {p.citation_count} cites" if p.citation_count else ""
+            lines.append(f"{i + 1}. {p.title} ({author}, {year}{cites})")
+
+        prompt = _CATEGORIZE_PROMPT.format(
+            count=len(papers),
             query=query,
-            corpus=corpus + extra_note,
+            paper_list="\n".join(lines),
         )
 
-        messages: list[dict] = [
-            {"role": "system", "content": synthesis_prompt},
-            {"role": "user", "content": "Categorize and synthesize these papers now."},
-        ]
+        try:
+            response = self.llm.chat([
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": "Categorize these papers now."},
+            ])
+            return _parse_categories(response.content or "", len(papers))
+        except Exception as e:
+            logger.warning("Categorization failed: %s", e)
+            return {}
+
+    def _synthesize_category(self, query: str, cat_name: str, papers: list[Paper]) -> str:
+        """Step 2: Synthesize one category with token-budgeted paper injection.
+
+        Uses Claude Code's progressive compression:
+        - Level 1 (top papers): Full entry with abstract
+        - Level 2 (middle): One-line entry
+        - Level 3 (tail): Counted
+        """
+        corpus = _build_tiered_corpus(papers, token_budget=15000)
+
+        prompt = _CATEGORY_SYNTHESIS_PROMPT.format(
+            query=query,
+            category=cat_name,
+            count=len(papers),
+            corpus=corpus,
+        )
+
+        response = self.llm.chat([
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": f"Write the synthesis for: {cat_name}"},
+        ])
+        return response.content or ""
+
+    def _cross_category_analysis(self, query: str, sections: list[tuple[str, str]]) -> str:
+        """Step 3: Analyze patterns across categories."""
+        # Build category summaries (first 500 chars of each section)
+        summaries = []
+        for name, content in sections:
+            summary = content[:500]
+            if len(content) > 500:
+                cut = summary.rfind(". ")
+                summary = summary[:cut + 1] if cut > 300 else summary + "..."
+            summaries.append(f"**{name}:**\n{summary}")
+
+        prompt = _CROSS_CATEGORY_PROMPT.format(
+            query=query,
+            category_summaries="\n\n".join(summaries),
+        )
 
         try:
-            response = self.llm.chat(messages)
+            response = self.llm.chat([
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": "Write the cross-category analysis."},
+            ])
             return response.content or ""
         except Exception as e:
-            return f"Error during synthesis: {e}"
+            return f"Cross-category analysis unavailable: {e}"
+
+    def _assemble_report(
+        self, query: str, papers: list[Paper],
+        categories: dict[str, list[int]],
+        sections: list[tuple[str, str]], cross_section: str,
+    ) -> str:
+        """Step 4: Assemble the final report programmatically."""
+        years = [p.year for p in papers if p.year]
+        yr_range = f"{min(years)}-{max(years)}" if years else "unknown"
+        total = len(self.papers)  # All papers, not just synthesis subset
+        db_str = ", ".join(sorted(self._databases_used))
+
+        parts = [
+            f"### {query}\n",
+            f"#### Coverage",
+            f"{total} papers found across {len(self._databases_used)} databases ({db_str}), "
+            f"years {yr_range}. Top {len(papers)} by citation count synthesized below.\n",
+            "#### Categories\n",
+        ]
+
+        # Add each category section
+        for cat_name, content in sections:
+            cat_indices = categories.get(cat_name, [])
+            parts.append(f"##### {cat_name} ({len(cat_indices)} papers)\n")
+            parts.append(content)
+            parts.append("")
+
+        # Cross-category analysis
+        parts.append(cross_section)
+        parts.append("")
+
+        # References (generated programmatically — never relies on LLM for this)
+        parts.append("#### References\n")
+        for i, p in enumerate(papers, 1):
+            author = p.authors[0] if p.authors else "Unknown"
+            if len(p.authors) > 1:
+                author += " et al."
+            year = p.year or "n.d."
+            journal = f" *{p.journal}*." if p.journal else ""
+            doi = f" DOI: {p.doi}" if p.doi else ""
+            oa = f" [Open Access]({p.open_access_url})" if p.open_access_url else ""
+            parts.append(f"[{i}] {author} ({year}). {p.title}.{journal}{doi}{oa}")
+
+        return "\n".join(parts)
+
+    def _fallback_synthesis(self, query: str, papers: list[Paper]) -> str:
+        """Single-pass fallback if multi-step synthesis fails."""
+        corpus = _build_paper_corpus({p.unique_key: p for p in papers[:50]})
+        prompt = (
+            f"Write a brief literature review on \"{query}\" based on these {min(len(papers), 50)} papers. "
+            f"Categorize by theme, include a table per category.\n\n{corpus}"
+        )
+        try:
+            response = self.llm.chat([
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": "Write the review."},
+            ])
+            return response.content or ""
+        except Exception as e:
+            return f"Synthesis failed: {e}"
 
     def _track_paper(self, paper: Paper) -> None:
         key = paper.unique_key
@@ -518,6 +695,117 @@ def _message_to_dict(msg) -> dict:
             for tc in msg.tool_calls
         ]
     return d
+
+
+def _parse_categories(text: str, paper_count: int) -> dict[str, list[int]]:
+    """Parse LLM category output into {name: [0-based indices]}."""
+    import re as _re
+    categories: dict[str, list[int]] = {}
+    current_cat = None
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        # Match "CATEGORY: Name" or "Category: Name"
+        cat_match = _re.match(r"(?:CATEGORY|Category)\s*:\s*(.+)", line, _re.IGNORECASE)
+        if cat_match:
+            current_cat = cat_match.group(1).strip()
+            continue
+        # Match "PAPERS: 1, 5, 12" or "Papers: 1, 5, 12"
+        papers_match = _re.match(r"(?:PAPERS|Papers)\s*:\s*(.+)", line, _re.IGNORECASE)
+        if papers_match and current_cat:
+            nums = _re.findall(r"\d+", papers_match.group(1))
+            indices = [int(n) - 1 for n in nums if 0 < int(n) <= paper_count]  # 1-based → 0-based
+            if indices:
+                categories[current_cat] = indices
+            current_cat = None
+
+    # Validate: every paper should be assigned. If >30% unassigned, categorization may have failed.
+    assigned = set()
+    for indices in categories.values():
+        assigned.update(indices)
+    if len(assigned) < paper_count * 0.3:
+        logger.warning("Categorization covered only %d/%d papers", len(assigned), paper_count)
+        # Still return what we have — better than nothing
+
+    return categories
+
+
+def _build_tiered_corpus(papers: list, token_budget: int = 15000) -> str:
+    """Build a token-budgeted corpus with progressive compression (Claude Code pattern).
+
+    Level 1 (top papers by citations): Full entry with abstract (~250 tokens each)
+    Level 2 (middle): One-line entry (~30 tokens each)
+    Level 3 (tail): Counted as a group
+    """
+    _CHARS_PER_TOKEN = 4
+
+    sorted_papers = sorted(papers, key=lambda p: (-(p.citation_count or 0), -(p.year or 0)))
+    lines = []
+    tokens_used = 0
+    level1_budget = int(token_budget * 0.6)
+    level2_budget = int(token_budget * 0.9)
+    full_count = 0
+
+    for i, p in enumerate(sorted_papers, 1):
+        # Level 1: full entry
+        full_entry = _paper_full_entry(i, p)
+        full_tokens = len(full_entry) // _CHARS_PER_TOKEN
+        if tokens_used + full_tokens < level1_budget:
+            lines.append(full_entry)
+            tokens_used += full_tokens
+            full_count += 1
+            continue
+
+        # Level 2: one-line entry
+        short_entry = _paper_short_entry(i, p)
+        short_tokens = len(short_entry) // _CHARS_PER_TOKEN
+        if tokens_used + short_tokens < level2_budget:
+            lines.append(short_entry)
+            tokens_used += short_tokens
+            continue
+
+        # Level 3: count the rest
+        remaining = len(sorted_papers) - i + 1
+        if remaining > 0:
+            lines.append(f"\n(+ {remaining} additional papers in this category, sorted by citation count)")
+        break
+
+    return "\n".join(lines)
+
+
+def _paper_full_entry(idx: int, p) -> str:
+    """Full paper entry with abstract for tier-1 papers."""
+    parts = []
+    author = p.authors[0] if p.authors else "Unknown"
+    if len(p.authors) > 1:
+        author += " et al."
+    parts.append(f"[{idx}] {p.title}")
+    meta = [author]
+    if p.year:
+        meta.append(str(p.year))
+    if p.journal:
+        meta.append(p.journal)
+    if p.citation_count is not None:
+        meta.append(f"{p.citation_count} citations")
+    if p.doi:
+        meta.append(f"DOI: {p.doi}")
+    parts.append(f"   {' | '.join(meta)}")
+    if p.abstract:
+        abstract = p.abstract[:250]
+        if len(p.abstract) > 250:
+            cut = abstract.rfind(". ")
+            abstract = abstract[:cut + 1] if cut > 150 else abstract + "..."
+        parts.append(f"   Abstract: {abstract}")
+    return "\n".join(parts)
+
+
+def _paper_short_entry(idx: int, p) -> str:
+    """One-line compressed entry for tier-2 papers."""
+    author = p.authors[0].split()[-1] if p.authors else "Unknown"
+    year = p.year or "n.d."
+    cites = f", {p.citation_count} cites" if p.citation_count else ""
+    return f"[{idx}] {p.title} ({author}, {year}{cites})"
 
 
 def _truncate(s: str, n: int) -> str:

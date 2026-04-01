@@ -17,6 +17,7 @@ _RETRIABLE_STATUSES = {429, 500, 502, 503}
 class PubMedSearchTool(Tool):
     name = "search_pubmed"
     category = "index"
+    quality_tier = 1  # Curated biomedical index (NLM)
     description = (
         "Search PubMed for biomedical and life sciences literature. Covers 36M+ "
         "citations including biomedicine, health, genomics, and related fields. "

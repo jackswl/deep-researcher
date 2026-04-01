@@ -15,6 +15,7 @@ _RETRIABLE_STATUSES = {429, 500, 502, 503}
 class CrossrefSearchTool(Tool):
     name = "search_crossref"
     category = "publisher"
+    quality_tier = 2  # Broad publisher metadata, includes all DOI-registered works
     description = (
         "Search CrossRef for academic papers by DOI metadata. Covers 150M+ records "
         "from most major publishers (Elsevier, Springer, Wiley, IEEE, etc.). "

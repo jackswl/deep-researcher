@@ -15,6 +15,7 @@ _RETRIABLE_STATUSES = {429, 500, 502, 503}
 class ScopusSearchTool(Tool):
     name = "search_scopus"
     category = "publisher"
+    quality_tier = 1  # Peer-reviewed, curated by Elsevier
     description = (
         "Search Scopus (Elsevier) for academic papers. Covers 90M+ records from most "
         "major publishers including Elsevier, Springer, Wiley, IEEE, ASCE, and ACM. "

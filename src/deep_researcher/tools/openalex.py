@@ -15,6 +15,7 @@ _RETRIABLE_STATUSES = {429, 500, 502, 503}
 class OpenAlexSearchTool(Tool):
     name = "search_openalex"
     category = "open_access"
+    quality_tier = 2  # Broad open metadata, includes all publication types
     description = (
         "Search OpenAlex for academic papers. Covers 250M+ works across all fields. "
         "Fully open dataset with excellent metadata coverage. Good for broad searches "

@@ -15,6 +15,7 @@ _RETRIABLE_STATUSES = {429, 500, 502, 503}
 class IEEEXploreSearchTool(Tool):
     name = "search_ieee"
     category = "publisher"
+    quality_tier = 1  # Peer-reviewed IEEE/IET publications
     description = (
         "Search IEEE Xplore for engineering and computer science papers. Covers 6M+ "
         "articles from IEEE journals, conferences, and standards, plus IET publications. "

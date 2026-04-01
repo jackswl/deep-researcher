@@ -18,6 +18,8 @@ class Tool:
     # Taxonomy: helps the agent reason about which tools to use when
     # Values: "preprint", "index", "open_access", "publisher", "citation", "utility"
     category: str = "index"
+    # Quality tier: 1=peer-reviewed/curated, 2=broad coverage, 3=preprints/open
+    quality_tier: int = 2
     # Year range filter (set at construction, applied automatically)
     _start_year: int | None = None
     _end_year: int | None = None

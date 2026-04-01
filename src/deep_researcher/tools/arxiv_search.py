@@ -16,6 +16,7 @@ _RETRIABLE_STATUSES = {429, 500, 502, 503}
 class ArxivSearchTool(Tool):
     name = "search_arxiv"
     category = "preprint"
+    quality_tier = 3  # Preprints — no peer review
     description = (
         "Search arXiv for preprints and papers. Covers physics, mathematics, "
         "computer science, quantitative biology, statistics, electrical engineering, "

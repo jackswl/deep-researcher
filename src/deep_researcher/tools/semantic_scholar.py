@@ -17,6 +17,7 @@ _NON_RETRIABLE_STATUSES = {400, 404}
 class SemanticScholarSearchTool(Tool):
     name = "search_semantic_scholar"
     category = "index"
+    quality_tier = 1  # Curated academic index with citation data
     description = (
         "Search Semantic Scholar for academic papers. Covers 200M+ papers across "
         "all academic fields. Returns citation counts and has excellent coverage of "
