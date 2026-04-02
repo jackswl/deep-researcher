@@ -74,7 +74,7 @@ class TestScholarSearchTool:
         assert tool.is_read_only is True
 
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch  # noqa: F811 (re-import for clarity)
 
 
 class TestEnrichmentTool:
@@ -134,3 +134,90 @@ class TestEnrichmentTool:
     def test_is_read_only(self):
         tool = self._make_tool()
         assert tool.is_read_only is True
+
+
+class TestCategorizeTool:
+    def _make_tool(self, llm_response="CATEGORY: Group A\nPAPERS: 1, 2\n\nCATEGORY: Group B\nPAPERS: 3"):
+        from deep_researcher.tools.categorize import CategorizeTool
+        mock_llm = MagicMock()
+        mock_llm.chat_no_think.return_value = llm_response
+        return CategorizeTool(llm=mock_llm)
+
+    def test_returns_categories_in_data(self):
+        tool = self._make_tool()
+        papers = [Paper(title=f"Paper {i}", authors=[f"A{i}"], year=2023) for i in range(3)]
+        result = tool.execute(papers=papers, query="test query")
+        assert result.data is not None
+        assert "Group A" in result.data
+        assert "Group B" in result.data
+
+    def test_handles_llm_failure(self):
+        from deep_researcher.tools.categorize import CategorizeTool
+        mock_llm = MagicMock()
+        mock_llm.chat_no_think.side_effect = Exception("LLM error")
+        tool = CategorizeTool(llm=mock_llm)
+        papers = [Paper(title=f"Paper {i}") for i in range(3)]
+        result = tool.execute(papers=papers, query="test query")
+        assert result.data is None or result.data == {}
+
+    def test_no_llm_returns_none(self):
+        from deep_researcher.tools.categorize import CategorizeTool
+        tool = CategorizeTool(llm=None)
+        papers = [Paper(title="P")]
+        result = tool.execute(papers=papers, query="test")
+        assert result.data is None
+
+
+class TestSynthesisTool:
+    def _make_tool(self, llm_response="## Section\nSynthesis content here"):
+        from deep_researcher.tools.synthesize import SynthesisTool
+        mock_llm = MagicMock()
+        mock_llm.chat_no_think.return_value = llm_response
+        return SynthesisTool(llm=mock_llm)
+
+    def test_returns_section_text(self):
+        tool = self._make_tool()
+        indexed = [(0, Paper(title="Paper A", abstract="Test abstract", citation_count=10))]
+        result = tool.execute(indexed_papers=indexed, query="test query", category_name="Group A")
+        assert "Synthesis content here" in result.text
+
+    def test_handles_llm_failure(self):
+        from deep_researcher.tools.synthesize import SynthesisTool
+        mock_llm = MagicMock()
+        mock_llm.chat_no_think.side_effect = Exception("LLM error")
+        tool = SynthesisTool(llm=mock_llm)
+        indexed = [(0, Paper(title="Paper A"))]
+        result = tool.execute(indexed_papers=indexed, query="test", category_name="A")
+        assert "failed" in result.text.lower()
+
+    def test_is_read_only(self):
+        tool = self._make_tool()
+        assert tool.is_read_only is True
+
+
+class TestCrossAnalysisTool:
+    def _make_tool(self, llm_response="#### Cross-Category Patterns\nPatterns here"):
+        from deep_researcher.tools.cross_analysis import CrossAnalysisTool
+        mock_llm = MagicMock()
+        mock_llm.chat_no_think.return_value = llm_response
+        return CrossAnalysisTool(llm=mock_llm)
+
+    def test_returns_analysis_text(self):
+        tool = self._make_tool()
+        sections = [("Group A", "Content A"), ("Group B", "Content B")]
+        result = tool.execute(sections=sections, query="test query")
+        assert "Patterns here" in result.text
+
+    def test_handles_llm_failure(self):
+        from deep_researcher.tools.cross_analysis import CrossAnalysisTool
+        mock_llm = MagicMock()
+        mock_llm.chat_no_think.side_effect = Exception("LLM error")
+        tool = CrossAnalysisTool(llm=mock_llm)
+        sections = [("A", "Content")]
+        result = tool.execute(sections=sections, query="test")
+        assert "unavailable" in result.text.lower()
+
+    def test_no_sections_returns_unavailable(self):
+        tool = self._make_tool()
+        result = tool.execute(sections=[], query="test")
+        assert "unavailable" in result.text.lower()
