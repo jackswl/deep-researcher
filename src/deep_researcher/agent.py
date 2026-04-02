@@ -17,8 +17,8 @@ from deep_researcher.constants import (
     MAX_FINAL_CATEGORIES,
     MAX_SYNTHESIS_PAPERS,
     MIN_CATEGORIZATION_COVERAGE,
-    NUM_QUERY_VARIATIONS,
-    SCHOLAR_RESULTS_PER_QUERY,
+    MIN_JOURNAL_H_INDEX,
+    SCHOLAR_MAX_RESULTS,
 )
 from deep_researcher.llm import LLMClient
 from deep_researcher.models import Paper
@@ -170,6 +170,7 @@ class ResearchAgent:
         self.console = Console()
         self._output_folder: str = ""
         self._cancel = threading.Event()
+        self._journal_h_index: dict[str, int] = {}  # journal_name -> h_index (from OpenAlex)
 
     def cancel(self) -> None:
         """Signal the agent to stop gracefully."""
@@ -231,6 +232,9 @@ class ResearchAgent:
         self.console.print(f"\n[bold blue]Phase 2: Enriching {len(self.papers)} papers...[/bold blue]")
         self._enrich_papers()
 
+        # === Phase 2b: Filter by journal quality ===
+        self._filter_by_journal_quality()
+
         # Checkpoint
         if self.papers and self._output_folder:
             try:
@@ -251,77 +255,49 @@ class ResearchAgent:
     # ------------------------------------------------------------------
 
     def _search_scholar(self, query: str) -> None:
-        """Search Google Scholar with the original query + LLM-generated variations."""
+        """Search Google Scholar for up to SCHOLAR_MAX_RESULTS papers."""
         from scholarly import scholarly
 
-        # Generate query variations for broader coverage
-        self.console.print("  [dim]Generating query variations...[/dim]")
-        try:
-            variations_text = self.llm.chat_no_think([
-                {"role": "system", "content": (
-                    f'/no_think\nGenerate {NUM_QUERY_VARIATIONS} Google Scholar search queries for: "{query}"\n'
-                    f'Rephrase the same topic using synonyms and alternative academic phrasing.\n'
-                    f'Stay close to the original topic — do NOT expand to tangentially related fields.\n'
-                    f'One per line, no numbering, no explanation.'
-                )},
-                {"role": "user", "content": "Generate the queries now."},
-            ])
-            variations = [
-                l.strip().strip("\"'") for l in variations_text.strip().split("\n")
-                if l.strip() and len(l.strip()) > 10
-            ][:NUM_QUERY_VARIATIONS]
-        except Exception as e:
-            logger.warning("Query variation generation failed: %s", e)
-            variations = []
-
-        all_queries = [query] + variations
-        for q in all_queries:
-            self.console.print(f"    [dim]{q}[/dim]")
-
-        # Search each query
         seen_titles: set[str] = set()
-        for q in all_queries:
-            if self._cancel.is_set():
-                self.console.print("  [yellow]Cancelled.[/yellow]")
-                return
-            count = 0
-            try:
-                for result in scholarly.search_pubs(q):
-                    if count >= SCHOLAR_RESULTS_PER_QUERY:
-                        break
-                    title = result.get("bib", {}).get("title", "")
-                    if not title or title.lower().strip() in seen_titles:
-                        continue
-                    seen_titles.add(title.lower().strip())
+        count = 0
+        try:
+            for result in scholarly.search_pubs(query):
+                if count >= SCHOLAR_MAX_RESULTS or self._cancel.is_set():
+                    break
+                title = result.get("bib", {}).get("title", "")
+                if not title or title.lower().strip() in seen_titles:
+                    continue
+                seen_titles.add(title.lower().strip())
 
-                    bib = result.get("bib", {})
-                    authors = bib.get("author", [])
-                    if isinstance(authors, str):
-                        authors = [a.strip() for a in authors.split(" and ")]
+                bib = result.get("bib", {})
+                authors = bib.get("author", [])
+                if isinstance(authors, str):
+                    authors = [a.strip() for a in authors.split(" and ")]
 
-                    year_str = bib.get("pub_year", "")
-                    year = int(year_str) if year_str and year_str.isdigit() else None
+                year_str = bib.get("pub_year", "")
+                year = int(year_str) if year_str and year_str.isdigit() else None
 
-                    paper = Paper(
-                        title=title,
-                        authors=authors,
-                        year=year,
-                        abstract=bib.get("abstract", ""),
-                        journal=bib.get("venue", ""),
-                        citation_count=result.get("num_citations", 0) or None,
-                        url=result.get("pub_url", ""),
-                        source="google_scholar",
-                    )
-                    key = paper.unique_key
-                    if key not in self.papers:
-                        self.papers[key] = paper
+                paper = Paper(
+                    title=title,
+                    authors=authors,
+                    year=year,
+                    abstract=bib.get("abstract", ""),
+                    journal=bib.get("venue", ""),
+                    citation_count=result.get("num_citations", 0) or None,
+                    url=result.get("pub_url", ""),
+                    source="google_scholar",
+                )
+                key = paper.unique_key
+                if key not in self.papers:
+                    self.papers[key] = paper
                     count += 1
-            except Exception as e:
-                logger.debug("Scholar search failed for '%s': %s", q[:50], e)
 
-            self.console.print(
-                f"  [cyan]{q[:60]}[/cyan] -> +{count} new (total: {len(self.papers)})"
-            )
+                if count % 20 == 0:
+                    self.console.print(f"    [dim]{count} papers...[/dim]")
+        except Exception as e:
+            logger.warning("Google Scholar search failed: %s", e)
+
+        self.console.print(f"  [green]Found {count} papers[/green]")
 
     # ------------------------------------------------------------------
     # Phase 2: OpenAlex + CrossRef enrichment
@@ -384,8 +360,7 @@ class ResearchAgent:
             f"  [green]Enriched {enriched}/{total} | Full abstracts: {has_abstract} | DOIs: {has_doi}[/green]"
         )
 
-    @staticmethod
-    def _apply_openalex(paper: Paper, work: dict) -> None:
+    def _apply_openalex(self, paper: Paper, work: dict) -> None:
         """Apply OpenAlex metadata to a Paper object."""
         doi = (work.get("doi") or "").replace("https://doi.org/", "")
         if doi:
@@ -405,6 +380,10 @@ class ResearchAgent:
         source = (work.get("primary_location") or {}).get("source") or {}
         if source.get("display_name"):
             paper.journal = source["display_name"]
+            # Track journal h-index for quality filtering
+            h_index = (source.get("summary_stats") or {}).get("h_index")
+            if h_index is not None:
+                self._journal_h_index[source["display_name"]] = h_index
 
         oa = work.get("open_access", {})
         if oa.get("oa_url"):
@@ -413,6 +392,45 @@ class ResearchAgent:
         oa_cites = work.get("cited_by_count", 0)
         if oa_cites and (paper.citation_count is None or oa_cites > paper.citation_count):
             paper.citation_count = oa_cites
+
+    # ------------------------------------------------------------------
+    # Phase 2b: Journal quality filter
+    # ------------------------------------------------------------------
+
+    def _filter_by_journal_quality(self) -> None:
+        """Remove papers from low-quality journals based on OpenAlex h-index.
+
+        Keeps papers that:
+        - Come from journals with h-index >= MIN_JOURNAL_H_INDEX
+        - Have no journal info (preprints, conference papers — benefit of the doubt)
+        - Have no h-index data (couldn't be looked up — benefit of the doubt)
+        - Are highly cited themselves (>20 citations — quality signal regardless of venue)
+        """
+        if not self._journal_h_index:
+            return  # No h-index data collected during enrichment
+
+        to_remove = []
+        for key, paper in self.papers.items():
+            journal = paper.journal
+            if not journal:
+                continue  # No journal info — keep
+            h_index = self._journal_h_index.get(journal)
+            if h_index is None:
+                continue  # No h-index data — keep
+            if h_index >= MIN_JOURNAL_H_INDEX:
+                continue  # Good journal — keep
+            if (paper.citation_count or 0) > 20:
+                continue  # Highly cited paper — keep regardless of venue
+            to_remove.append((key, paper.title, journal, h_index))
+
+        if to_remove:
+            for key, title, journal, h_index in to_remove:
+                del self.papers[key]
+                logger.debug("Filtered: '%s' (journal '%s', h-index=%d)", title[:50], journal, h_index)
+            self.console.print(
+                f"  [yellow]Filtered {len(to_remove)} papers from low-quality journals "
+                f"(h-index < {MIN_JOURNAL_H_INDEX}). {len(self.papers)} papers remaining.[/yellow]"
+            )
 
     # ------------------------------------------------------------------
     # Phase 3: Multi-step synthesis
