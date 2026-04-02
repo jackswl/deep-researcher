@@ -162,10 +162,14 @@ class ToolResult:
 
 @dataclass
 class PipelineState:
-    """Immutable-ish state that flows through the research pipeline.
+    """State that flows through the research pipeline.
 
     Each phase receives the current state and returns a new state via evolve().
-    This prevents in-place mutation (claude-code Principle 3).
+    Container fields (dicts, lists) are shallow-copied so adding/removing entries
+    in one state doesn't affect another. Paper objects within the dict are shared
+    references — callers must not mutate individual Papers after evolve().
+    Pipeline tools (enrichment, search) return fresh Paper objects, so this is
+    safe in practice.
     """
     query: str
     papers: dict[str, Paper] = field(default_factory=dict)

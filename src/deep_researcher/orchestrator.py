@@ -24,7 +24,7 @@ from deep_researcher.constants import (
     MAX_SYNTHESIS_PAPERS,
 )
 from deep_researcher.llm import LLMClient
-from deep_researcher.models import Paper, PipelineState, ToolResult
+from deep_researcher.models import Paper, PipelineState
 from deep_researcher.parsing import build_tiered_corpus
 from deep_researcher.prompts import CLARIFY_PROMPT
 from deep_researcher.report import get_output_folder, save_checkpoint, save_report
@@ -176,14 +176,15 @@ class Orchestrator:
             cancel=self._cancel,
         )
 
-        # Rebuild papers dict from enriched results
+        # Rebuild papers dict preserving original keys (match old behavior:
+        # enrichment adds metadata but doesn't change which papers exist)
+        original_keys = list(state.papers.keys())
         enriched: dict[str, Paper] = {}
-        for paper in result.papers:
-            key = paper.unique_key
-            if key in enriched:
-                enriched[key].merge(paper)
+        for i, paper in enumerate(result.papers):
+            if i < len(original_keys):
+                enriched[original_keys[i]] = paper
             else:
-                enriched[key] = paper
+                enriched[paper.unique_key] = paper
 
         self.console.print(f"  [green]{result.text}[/green]")
         return state.evolve(papers=enriched)

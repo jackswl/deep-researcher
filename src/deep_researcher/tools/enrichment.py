@@ -132,7 +132,10 @@ class EnrichmentTool(Tool):
 
         inv_idx = work.get("abstract_inverted_index")
         if inv_idx:
-            words = [""] * (max(max(pos) for pos in inv_idx.values()) + 1)
+            all_positions = [pos for positions in inv_idx.values() for pos in positions]
+            if not all_positions:
+                return
+            words = [""] * (max(all_positions) + 1)
             for word, positions in inv_idx.items():
                 for pos in positions:
                     words[pos] = word
