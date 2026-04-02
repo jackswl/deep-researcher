@@ -6,158 +6,36 @@ from rich.table import Table
 
 from deep_researcher.config import Config
 from deep_researcher.constants import (
-    ABSTRACT_MAX_CHARS,
-    ABSTRACT_MIN_CUT,
     CATEGORIZE_BATCH_SIZE,
     CATEGORY_SYNTHESIS_TIMEOUT,
     CATEGORY_TOKEN_BUDGET,
-    CHARS_PER_TOKEN,
     FALLBACK_MAX_PAPERS,
     FALLBACK_TOKEN_BUDGET,
     MAX_FINAL_CATEGORIES,
     MAX_SYNTHESIS_PAPERS,
-    MIN_CATEGORIZATION_COVERAGE,
     SCHOLAR_MAX_RESULTS,
 )
 from deep_researcher.llm import LLMClient
 from deep_researcher.models import Paper
+from deep_researcher.parsing import (
+    build_tiered_corpus,
+    parse_categories,
+    parse_merged_categories,
+    titles_match,
+)
+from deep_researcher.prompts import (
+    CATEGORIZE_PROMPT,
+    CATEGORY_SYNTHESIS_PROMPT,
+    CLARIFY_PROMPT,
+    CROSS_CATEGORY_PROMPT,
+    MERGE_CATEGORIES_PROMPT,
+)
 from deep_researcher.report import get_output_folder, save_checkpoint, save_report
 
 import logging
 import threading
 
 logger = logging.getLogger("deep_researcher")
-
-
-# --- Synthesis prompts ---
-
-_CATEGORIZE_PROMPT = """\
-You are a research librarian. Below are {count} papers on: "{query}"
-
-Assign each paper to exactly one category (3-6 categories). \
-Categorize by approach/theme, NOT by database or year.
-
-## Papers
-{paper_list}
-
-## Output Format
-Return ONLY a list in this exact format (one line per category, paper numbers comma-separated):
-
-CATEGORY: Category Name
-PAPERS: 1, 5, 12, 23
-
-CATEGORY: Another Category
-PAPERS: 2, 7, 8, 19
-
-Rules:
-- Every paper number must appear in exactly one category
-- 3-6 categories total
-- Category names should be specific (e.g., "Vision-Based Damage Detection", not "Methods")
-- No explanation needed — just the categories and paper numbers
-"""
-
-_MERGE_CATEGORIES_PROMPT = """\
-/no_think
-You are a research librarian. Papers on "{query}" were categorized in batches, \
-producing {count} overlapping categories. Merge them into {target} final categories \
-by grouping semantically similar ones together.
-
-## Current categories (name -> paper count)
-{category_list}
-
-## Output Format
-Return ONLY a mapping in this exact format (one line per final category):
-
-FINAL: Final Category Name
-MERGE: Old Category A, Old Category B, Old Category C
-
-FINAL: Another Final Category
-MERGE: Old Category D, Old Category E
-
-Rules:
-- Exactly {target} final categories
-- Every old category must appear in exactly one MERGE line
-- Use the old category names exactly as listed above
-- Final category names should be descriptive (not generic like "Other")
-"""
-
-_CATEGORY_SYNTHESIS_PROMPT = """\
-You are a research analyst writing one section of a detailed literature review on: "{query}"
-
-This section covers the category: **{category}** ({count} papers)
-
-## Papers in this category
-{corpus}
-
-## Write this section. Reference papers by [number].
-
-**What this group does:**
-Write a paragraph (4-6 sentences) explaining the shared approach/theme.
-Reference individual papers: e.g., "Smith et al. [1] introduced X. Jones et al. [2] extended this by Y."
-
-**Key methods:**
-Write a paragraph describing the specific methods and techniques.
-For each method, cite which paper(s) used it.
-
-**Main findings:**
-Write a paragraph on collective findings. Include specific results ONLY if the \
-abstract explicitly states them (e.g., accuracy percentages, performance metrics). \
-Do NOT infer, generalize, or fabricate results that are not in the abstracts.
-
-**Limitations & gaps (your analysis):**
-Write YOUR OWN analysis of common weaknesses and gaps across this group. \
-This is your synthesis — do NOT attribute these observations to specific papers \
-with [number] citations. Instead write: "A common limitation across these studies is..." \
-or "This group does not address..."
-
-| Ref | Paper | Year | Method | Key Finding | Citations |
-|-----|-------|------|--------|-------------|-----------|
-(Include EVERY paper listed above in the table)
-
-## CRITICAL RULES
-- ONLY state what the abstracts explicitly say. If a metric is not in the abstract, do NOT invent it.
-- When citing [N], the claim MUST come from that paper's abstract above. Verify before writing.
-- The Limitations section is YOUR analysis — do NOT fake-attribute observations to papers.
-- Include ALL papers from this category in the table.
-- Be direct. No filler. No "In recent years..."
-- Do NOT write references or cross-category analysis — just this one section.
-"""
-
-_CROSS_CATEGORY_PROMPT = """\
-You are a research analyst. You've categorized papers on "{query}" into these groups:
-
-{category_summaries}
-
-Now write ONLY these sections:
-
-#### Cross-Category Patterns
-What patterns emerge across categories? Which are converging? \
-What contradictions exist? Which papers bridge multiple categories?
-
-#### Gaps & Opportunities
-Be specific. Name concrete research questions nobody has addressed. \
-Point to specific method/domain combinations that haven't been tried.
-
-#### Open Access Papers
-List any papers with free full-text URLs mentioned above.
-
-Rules:
-- Be direct and specific — no vague generalities
-- Reference specific paper numbers when possible
-- Do NOT repeat the per-category analysis
-"""
-
-_CLARIFY_PROMPT = """\
-You are a research assistant helping to refine a research question before searching academic databases.
-
-Given the user's research topic, generate exactly 3 short, focused clarifying questions that would \
-help narrow the search and produce better results. Focus on:
-- Specific subfield or application domain
-- Time period or recency preferences
-- Methodological focus (theoretical, empirical, computational, etc.)
-
-Format: Return ONLY the 3 questions, one per line, numbered 1-3. No preamble.
-"""
 
 
 class ResearchAgent:
@@ -178,7 +56,7 @@ class ResearchAgent:
         self.console.print("\n[bold]Generating clarifying questions...[/bold]\n")
         try:
             response = self.llm.chat([
-                {"role": "system", "content": _CLARIFY_PROMPT},
+                {"role": "system", "content": CLARIFY_PROMPT},
                 {"role": "user", "content": query},
             ])
             questions = (response.content or "").strip()
@@ -319,7 +197,7 @@ class ResearchAgent:
                 )
                 if resp.status_code == 200:
                     results = resp.json().get("results", [])
-                    if results and _titles_match(paper.title, results[0].get("title", "")):
+                    if results and titles_match(paper.title, results[0].get("title", "")):
                         self._apply_openalex(paper, results[0])
                         enriched += 1
                         continue
@@ -335,7 +213,7 @@ class ResearchAgent:
                     if items and items[0].get("DOI"):
                         # Verify CrossRef result is actually the same paper
                         cr_title = (items[0].get("title") or [""])[0]
-                        if _titles_match(paper.title, cr_title):
+                        if titles_match(paper.title, cr_title):
                             doi = items[0]["DOI"]
                             resp2 = httpx.get(
                                 f"https://api.openalex.org/works/doi:{doi}",
@@ -477,7 +355,7 @@ class ResearchAgent:
                 abstract = f"\n   Abstract: {p.abstract}" if p.abstract else ""
                 lines.append(f"{global_idx + 1}. {p.title} ({author}, {year}{cites}){abstract}")
 
-            prompt = _CATEGORIZE_PROMPT.format(
+            prompt = CATEGORIZE_PROMPT.format(
                 count=len(batch),
                 query=query,
                 paper_list="\n".join(lines),
@@ -489,7 +367,7 @@ class ResearchAgent:
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": "Categorize these papers now."},
                 ])
-                batch_cats = _parse_categories(content, len(papers))
+                batch_cats = parse_categories(content, len(papers))
                 for cat_name, indices in batch_cats.items():
                     if cat_name in all_categories:
                         all_categories[cat_name].extend(indices)
@@ -509,7 +387,7 @@ class ResearchAgent:
         cat_list = "\n".join(
             f"- {name} ({len(indices)} papers)" for name, indices in categories.items()
         )
-        prompt = _MERGE_CATEGORIES_PROMPT.format(
+        prompt = MERGE_CATEGORIES_PROMPT.format(
             query=query,
             count=len(categories),
             target=MAX_FINAL_CATEGORIES,
@@ -522,7 +400,7 @@ class ResearchAgent:
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": "Merge the categories now."},
             ])
-            merged = _parse_merged_categories(content, categories)
+            merged = parse_merged_categories(content, categories)
             if merged:
                 return merged
         except Exception as e:
@@ -535,9 +413,9 @@ class ResearchAgent:
     def _synthesize_category(self, query: str, cat_name: str, indexed_papers: list[tuple[int, Paper]]) -> str:
         """Synthesize one category. indexed_papers are (global_index, Paper) pairs
         so [N] references match the final reference list."""
-        corpus = _build_tiered_corpus(indexed_papers, token_budget=CATEGORY_TOKEN_BUDGET)
+        corpus = build_tiered_corpus(indexed_papers, token_budget=CATEGORY_TOKEN_BUDGET)
 
-        prompt = _CATEGORY_SYNTHESIS_PROMPT.format(
+        prompt = CATEGORY_SYNTHESIS_PROMPT.format(
             query=query,
             category=cat_name,
             count=len(indexed_papers),
@@ -559,7 +437,7 @@ class ResearchAgent:
                 summary = summary[:cut + 1] if cut > 300 else summary + "..."
             summaries.append(f"**{name}:**\n{summary}")
 
-        prompt = _CROSS_CATEGORY_PROMPT.format(
+        prompt = CROSS_CATEGORY_PROMPT.format(
             query=query,
             category_summaries="\n\n".join(summaries),
         )
@@ -617,7 +495,7 @@ class ResearchAgent:
     def _fallback_synthesis(self, query: str, papers: list[Paper]) -> str:
         """Single-pass fallback if multi-step synthesis fails."""
         top_papers = papers[:FALLBACK_MAX_PAPERS]
-        corpus = _build_tiered_corpus(
+        corpus = build_tiered_corpus(
             list(enumerate(top_papers)),
             token_budget=FALLBACK_TOKEN_BUDGET,
         )
@@ -669,189 +547,3 @@ class ResearchAgent:
         except Exception as e:
             self.console.print(f"[red]Error saving report: {e}[/red]")
 
-
-# ------------------------------------------------------------------
-# Parsing helpers
-# ------------------------------------------------------------------
-
-def _parse_categories(text: str, paper_count: int) -> dict[str, list[int]]:
-    """Parse LLM category output into {name: [0-based indices]}."""
-    import re as _re
-    categories: dict[str, list[int]] = {}
-    current_cat = None
-
-    for line in text.split("\n"):
-        cleaned = _re.sub(r"[*_`#>]", "", line).strip()
-        cleaned = _re.sub(r"^[-+]\s*", "", cleaned)
-        if not cleaned:
-            continue
-
-        cat_match = _re.match(r"(?:CATEGORY|Category)\s*:\s*(.+)", cleaned, _re.IGNORECASE)
-        if cat_match:
-            current_cat = cat_match.group(1).strip()
-            continue
-
-        papers_match = _re.match(r"(?:PAPERS|Papers)\s*:\s*(.+)", cleaned, _re.IGNORECASE)
-        if papers_match and current_cat:
-            nums = _re.findall(r"\d+", papers_match.group(1))
-            indices = [int(n) - 1 for n in nums if 0 < int(n) <= paper_count]
-            if indices:
-                categories[current_cat] = indices
-            current_cat = None
-
-    assigned = set()
-    for indices in categories.values():
-        assigned.update(indices)
-    if len(assigned) < paper_count * MIN_CATEGORIZATION_COVERAGE:
-        logger.warning("Categorization covered only %d/%d papers", len(assigned), paper_count)
-
-    return categories
-
-
-def _parse_merged_categories(
-    text: str, original: dict[str, list[int]]
-) -> dict[str, list[int]] | None:
-    """Parse LLM merge output into consolidated categories."""
-    import re as _re
-    merged: dict[str, list[int]] = {}
-    current_final = None
-
-    for line in text.split("\n"):
-        cleaned = _re.sub(r"[*_`#>]", "", line).strip()
-        cleaned = _re.sub(r"^[-+]\s*", "", cleaned)
-        if not cleaned:
-            continue
-
-        final_match = _re.match(r"(?:FINAL)\s*:\s*(.+)", cleaned, _re.IGNORECASE)
-        if final_match:
-            current_final = final_match.group(1).strip()
-            continue
-
-        merge_match = _re.match(r"(?:MERGE)\s*:\s*(.+)", cleaned, _re.IGNORECASE)
-        if merge_match and current_final:
-            old_names = [n.strip() for n in merge_match.group(1).split(",")]
-            indices: list[int] = []
-            for old_name in old_names:
-                if old_name in original:
-                    indices.extend(original[old_name])
-                else:
-                    for orig_name in original:
-                        if old_name.lower() in orig_name.lower() or orig_name.lower() in old_name.lower():
-                            indices.extend(original[orig_name])
-                            break
-            if indices:
-                merged[current_final] = indices
-            current_final = None
-
-    if not merged:
-        return None
-    total_papers = sum(len(v) for v in merged.values())
-    orig_total = sum(len(v) for v in original.values())
-    if total_papers < orig_total * 0.5:
-        logger.warning("Category merge lost too many papers (%d/%d)", total_papers, orig_total)
-        return None
-    return merged
-
-
-def _build_tiered_corpus(indexed_papers: list, token_budget: int = 15000) -> str:
-    """Build a token-budgeted corpus with progressive compression.
-
-    indexed_papers: list of (global_index, Paper) tuples.
-    Uses global indices for [N] references so they match the final reference list.
-    """
-    if not indexed_papers:
-        return ""
-
-    # Sort by citations within the category
-    sorted_pairs = sorted(indexed_papers, key=lambda x: (-(x[1].citation_count or 0), -(x[1].year or 0)))
-
-    lines = []
-    tokens_used = 0
-    level1_budget = int(token_budget * 0.6)
-    level2_budget = int(token_budget * 0.9)
-
-    for processed, (idx, p) in enumerate(sorted_pairs):
-        ref_num = idx + 1  # 0-based index -> 1-based reference number
-
-        full_entry = _paper_full_entry(ref_num, p)
-        full_tokens = len(full_entry) // CHARS_PER_TOKEN
-        if tokens_used + full_tokens < level1_budget:
-            lines.append(full_entry)
-            tokens_used += full_tokens
-            continue
-
-        short_entry = _paper_short_entry(ref_num, p)
-        short_tokens = len(short_entry) // CHARS_PER_TOKEN
-        if tokens_used + short_tokens < level2_budget:
-            lines.append(short_entry)
-            tokens_used += short_tokens
-            continue
-
-        remaining = len(sorted_pairs) - processed
-        if remaining > 0:
-            lines.append(f"\n(+ {remaining} additional papers in this category, sorted by citation count)")
-        break
-
-    return "\n".join(lines)
-
-
-def _paper_full_entry(idx: int, p) -> str:
-    """Full paper entry with abstract for tier-1 papers."""
-    parts = []
-    author = p.authors[0] if p.authors else "Unknown"
-    if len(p.authors) > 1:
-        author += " et al."
-    parts.append(f"[{idx}] {p.title}")
-    meta = [author]
-    if p.year:
-        meta.append(str(p.year))
-    if p.journal:
-        meta.append(p.journal)
-    if p.citation_count is not None:
-        meta.append(f"{p.citation_count} citations")
-    if p.doi:
-        meta.append(f"DOI: {p.doi}")
-    parts.append(f"   {' | '.join(meta)}")
-    if p.abstract:
-        abstract = p.abstract[:ABSTRACT_MAX_CHARS]
-        if len(p.abstract) > ABSTRACT_MAX_CHARS:
-            cut = abstract.rfind(". ")
-            abstract = abstract[:cut + 1] if cut > ABSTRACT_MIN_CUT else abstract + "..."
-        parts.append(f"   Abstract: {abstract}")
-    return "\n".join(parts)
-
-
-def _paper_short_entry(idx: int, p) -> str:
-    """One-line compressed entry for tier-2 papers."""
-    author = p.authors[0].split()[-1] if p.authors else "Unknown"
-    year = p.year or "n.d."
-    cites = f", {p.citation_count} cites" if p.citation_count else ""
-    return f"[{idx}] {p.title} ({author}, {year}{cites})"
-
-
-def _titles_match(title_a: str, title_b: str) -> bool:
-    """Check if two paper titles refer to the same work.
-
-    Uses word overlap ratio to catch fuzzy matches (different punctuation,
-    truncation, etc.) while rejecting completely different papers that share
-    a few common words like "large language models".
-    """
-    import re as _re
-    words_a = set(_re.findall(r"[a-z0-9]+", title_a.lower()))
-    words_b = set(_re.findall(r"[a-z0-9]+", title_b.lower()))
-    if not words_a or not words_b:
-        return False
-    # Remove very common words that cause false matches
-    stopwords = {"a", "an", "the", "of", "in", "for", "and", "on", "to", "with", "based", "using"}
-    words_a -= stopwords
-    words_b -= stopwords
-    if not words_a or not words_b:
-        return False
-    overlap = len(words_a & words_b)
-    smaller = min(len(words_a), len(words_b))
-    return overlap / smaller >= 0.5
-
-
-def _truncate(s: str, n: int) -> str:
-    s = s.replace("\n", " ").strip()
-    return s[:n] + "..." if len(s) > n else s
