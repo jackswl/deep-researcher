@@ -7,7 +7,7 @@ import sys
 from rich.console import Console
 
 from deep_researcher import __version__
-from deep_researcher.agent import ResearchAgent
+from deep_researcher.orchestrator import Orchestrator
 from deep_researcher.config import Config
 
 # Provider presets — saves users from looking up base URLs
@@ -110,16 +110,17 @@ def main() -> None:
         yr_range = f"{config.start_year if config.start_year is not None else '...'}-{config.end_year if config.end_year is not None else '...'}"
         console.print(f"[dim]Settings: years={yr_range}[/dim]")
 
-    agent = ResearchAgent(config)
+    orchestrator = Orchestrator(config)
     query = args.query
     if config.interactive:
-        query = agent.clarify(query)
+        query = orchestrator.clarify(query)
+
     def _on_interrupt(signum, frame):
-        agent.cancel()
+        orchestrator.cancel()
 
     prev_handler = signal.signal(signal.SIGINT, _on_interrupt)
     try:
-        report = agent.research(query)
+        report = orchestrator.research(query)
         if report:
             console.print("\n")
             try:
@@ -129,9 +130,6 @@ def main() -> None:
                 console.print(report)
     except KeyboardInterrupt:
         console.print("\n[yellow]Research interrupted.[/yellow]")
-        if agent.papers:
-            console.print(f"[yellow]Saving {len(agent.papers)} papers collected so far...[/yellow]")
-            agent._save(query, "# Research Interrupted\n\nPartial results: research was interrupted before synthesis.")
         sys.exit(1)
     finally:
         signal.signal(signal.SIGINT, prev_handler)
