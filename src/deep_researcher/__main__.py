@@ -33,10 +33,8 @@ def main() -> None:
     parser.add_argument("--model", default=None, help="LLM model name")
     parser.add_argument("--base-url", default=None, help="OpenAI-compatible API base URL")
     parser.add_argument("--api-key", default=None, help="API key")
-    parser.add_argument("--max-iterations", type=int, default=None, help="Maximum research iterations (default: 20)")
     parser.add_argument("--output", default=None, help="Output directory (default: ./output)")
     parser.add_argument("--email", default=None, help="Email for polite API access to OpenAlex/CrossRef/Unpaywall")
-    parser.add_argument("--breadth", type=int, default=None, help="Search breadth: query variations (1-5, default: 3)")
     parser.add_argument("--start-year", type=int, default=None, help="Filter papers published on or after this year")
     parser.add_argument("--end-year", type=int, default=None, help="Filter papers published on or before this year")
     parser.add_argument("--interactive", action="store_true", help="Ask clarifying questions before researching")
@@ -89,14 +87,10 @@ def main() -> None:
         config.base_url = args.base_url
     if args.api_key:
         config.api_key = args.api_key
-    if args.max_iterations:
-        config.max_iterations = args.max_iterations
     if args.output:
         config.output_dir = args.output
     if args.email:
         config.email = args.email
-    if args.breadth is not None:
-        config.breadth = max(1, min(args.breadth, 5))
     if args.start_year is not None:
         config.start_year = args.start_year
     if args.end_year is not None:
@@ -112,11 +106,9 @@ def main() -> None:
             sys.exit(1)
 
     console.print(f"[dim]Model: {config.model} @ {config.base_url}[/dim]")
-    settings_parts = [f"breadth={config.breadth}", f"max_iter={config.max_iterations}"]
     if config.start_year is not None or config.end_year is not None:
         yr_range = f"{config.start_year if config.start_year is not None else '...'}-{config.end_year if config.end_year is not None else '...'}"
-        settings_parts.append(f"years={yr_range}")
-    console.print(f"[dim]Settings: {' '.join(settings_parts)}[/dim]")
+        console.print(f"[dim]Settings: years={yr_range}[/dim]")
 
     agent = ResearchAgent(config)
     query = args.query

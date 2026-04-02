@@ -34,7 +34,6 @@ class Config:
     core_api_key: str = ""
     scopus_api_key: str = ""
     ieee_api_key: str = ""
-    breadth: int = 3
     timeout: int = 500  # ~8 min — local models need time for multi-step synthesis
     start_year: int | None = None
     end_year: int | None = None
@@ -79,7 +78,6 @@ class Config:
                     except ValueError:
                         pass
 
-        self.breadth = max(1, min(self.breadth, 5))
         self.max_iterations = max(1, min(self.max_iterations, 50))
 
         self.validate()

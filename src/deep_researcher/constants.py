@@ -6,10 +6,9 @@ All tunable thresholds in one place for easy adjustment.
 # --- Token estimation ---
 CHARS_PER_TOKEN = 4  # Rough approximation for English text
 
-# --- Search phase ---
-MAX_SEARCH_TOKENS = 80_000          # Context budget for search phase
-MAX_COMPACT_FAILURES = 3            # Circuit breaker: proceed to synthesis after N failures
-LLM_SEARCH_ITERATIONS = 3          # LLM gap-fill iterations (after systematic sweep)
+# --- Google Scholar search ---
+SCHOLAR_RESULTS_PER_QUERY = 15     # Results per query variation
+NUM_QUERY_VARIATIONS = 4           # LLM-generated query variations (+ original = 5 total)
 
 # --- Synthesis phase ---
 MAX_SYNTHESIS_PAPERS = 200          # Cap on papers sent to synthesis
@@ -29,7 +28,6 @@ MAX_TOOL_CONCURRENCY = 8            # Max parallel tool executions
 # --- Display / truncation ---
 ABSTRACT_MAX_CHARS = 250            # Max abstract length in corpus entries
 ABSTRACT_MIN_CUT = 150              # Minimum cut point for sentence-boundary truncation
-SYSTEMATIC_SEARCH_MAX_RESULTS = 10  # Results per query in systematic sweep
 
 # --- Relevance filtering ---
 MIN_CATEGORIZATION_COVERAGE = 0.3   # Warn if <30% of papers categorized

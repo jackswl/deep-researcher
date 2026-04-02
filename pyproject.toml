@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "deep-researcher"
-version = "0.2.0"
+version = "0.3.0"
 description = "An agentic academic research assistant that searches multiple databases and produces literature reviews"
 readme = "README.md"
 license = "MIT"
@@ -13,6 +13,7 @@ dependencies = [
     "openai>=1.0.0",
     "httpx>=0.27.0",
     "rich>=13.0.0",
+    "scholarly>=1.7.0",
 ]
 
 [project.optional-dependencies]
