@@ -51,7 +51,7 @@ def save_report(
 
     # BibTeX with header
     bibtex_path = os.path.join(folder, "references.bib")
-    seen_keys: set[str] = set()
+    seen_keys: dict[str, int] = {}  # key -> count
     with open(bibtex_path, "w", encoding="utf-8") as f:
         f.write(f"% Bibliography exported by Deep Researcher\n")
         f.write(f"% Generated: {datetime.now().strftime('%Y-%m-%d')}\n")
@@ -65,8 +65,11 @@ def save_report(
             if key_match:
                 key = key_match.group(1)
                 if key in seen_keys:
-                    continue
-                seen_keys.add(key)
+                    seen_keys[key] += 1
+                    suffix = f"_{seen_keys[key]}"
+                    bib = paper.to_bibtex(key_suffix=suffix)
+                else:
+                    seen_keys[key] = 0
             f.write(bib)
             f.write("\n\n")
 

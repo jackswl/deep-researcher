@@ -87,7 +87,7 @@ class Paper:
             parts.append(f"Open Access: {self.open_access_url}")
         return "\n".join(parts)
 
-    def to_bibtex(self) -> str:
+    def to_bibtex(self, key_suffix: str = "") -> str:
         if self.doi:
             key = re.sub(r"[^a-zA-Z0-9]", "_", self.doi)
         else:
@@ -102,7 +102,7 @@ class Paper:
                 if words:
                     cleaned = re.sub(r"[^a-z]", "", words[0].lower())
                     title_part = cleaned or "untitled"
-            key = f"{author_part}{year_part}{title_part}"
+            key = f"{author_part}{year_part}{title_part}{key_suffix}"
 
         entry_type = "article" if self.journal else "misc"
         lines = [f"@{entry_type}{{{key},"]
