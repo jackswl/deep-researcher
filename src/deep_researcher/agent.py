@@ -491,6 +491,7 @@ class ResearchAgent:
             try:
                 return tool.execute(query=sq, max_results=10)
             except Exception:
+                logger.debug("Tool %s failed for query '%s'", tool.name, sq, exc_info=True)
                 return None
 
         for domain_term in self._domain_terms:
@@ -528,7 +529,7 @@ class ResearchAgent:
             try:
                 save_checkpoint(self.papers, self._output_folder)
             except Exception:
-                pass
+                logger.debug("Checkpoint save failed (non-critical)", exc_info=True)
 
     def research(self, query: str) -> str:
         self.console.print(Panel(
@@ -691,7 +692,7 @@ class ResearchAgent:
                 try:
                     save_checkpoint(self.papers, self._output_folder)
                 except Exception:
-                    pass  # Non-critical — don't break the search loop
+                    logger.debug("Checkpoint save failed (non-critical)", exc_info=True)
         else:
             # Loop completed without LLM stopping (hit max iterations)
             self.console.print(f"\n[yellow]Reached iteration limit ({max_iterations}). Proceeding to synthesis with {len(self.papers)} papers.[/yellow]")
@@ -989,35 +990,41 @@ def _message_to_dict(msg) -> dict:
 
 
 def _parse_categories(text: str, paper_count: int) -> dict[str, list[int]]:
-    """Parse LLM category output into {name: [0-based indices]}."""
+    """Parse LLM category output into {name: [0-based indices]}.
+
+    Tolerant parser: strips markdown formatting before matching to handle
+    variations like **CATEGORY:**, `Category:`, - Category:, etc.
+    """
     import re as _re
     categories: dict[str, list[int]] = {}
     current_cat = None
+
     for line in text.split("\n"):
-        line = line.strip()
-        if not line:
+        # Strip markdown formatting: bold, italic, backticks, list markers, headers
+        cleaned = _re.sub(r"[*_`#>]", "", line).strip()
+        cleaned = _re.sub(r"^[-+]\s*", "", cleaned)
+        if not cleaned:
             continue
-        # Match "CATEGORY: Name" or "Category: Name"
-        cat_match = _re.match(r"(?:CATEGORY|Category)\s*:\s*(.+)", line, _re.IGNORECASE)
+
+        cat_match = _re.match(r"(?:CATEGORY|Category)\s*:\s*(.+)", cleaned, _re.IGNORECASE)
         if cat_match:
             current_cat = cat_match.group(1).strip()
             continue
-        # Match "PAPERS: 1, 5, 12" or "Papers: 1, 5, 12"
-        papers_match = _re.match(r"(?:PAPERS|Papers)\s*:\s*(.+)", line, _re.IGNORECASE)
+
+        papers_match = _re.match(r"(?:PAPERS|Papers)\s*:\s*(.+)", cleaned, _re.IGNORECASE)
         if papers_match and current_cat:
             nums = _re.findall(r"\d+", papers_match.group(1))
-            indices = [int(n) - 1 for n in nums if 0 < int(n) <= paper_count]  # 1-based → 0-based
+            indices = [int(n) - 1 for n in nums if 0 < int(n) <= paper_count]
             if indices:
                 categories[current_cat] = indices
             current_cat = None
 
-    # Validate: every paper should be assigned. If >30% unassigned, categorization may have failed.
+    # Validate coverage
     assigned = set()
     for indices in categories.values():
         assigned.update(indices)
     if len(assigned) < paper_count * MIN_CATEGORIZATION_COVERAGE:
         logger.warning("Categorization covered only %d/%d papers", len(assigned), paper_count)
-        # Still return what we have — better than nothing
 
     return categories
 
