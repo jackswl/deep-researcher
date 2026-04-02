@@ -1241,24 +1241,23 @@ def _is_relevant(paper, query: str, method_terms: list[str] = None, domain_terms
     """Relevance check using LLM-extracted term groups.
 
     A paper must match at least one METHOD term AND at least one DOMAIN term.
-    For compound phrases (2+ words), also generates 2-word sub-phrases to
-    handle cases where the paper uses different word order or partial matches.
+    Uses word-boundary matching to prevent false positives like "vit" matching
+    "sensitivity" or "health monitoring" matching "mental health monitoring".
     """
+    import re as _re
     paper_text = ((paper.title or "") + " " + (paper.abstract or "")).lower()
     if not paper_text.strip():
         return True  # Keep papers with no text (can't judge)
 
     if method_terms and domain_terms:
-        # Generate matching terms: original terms + 2-word sub-phrases from compound terms
         method_match = _expand_for_matching(method_terms)
         domain_match = _expand_for_matching(domain_terms)
 
-        has_method = any(term in paper_text for term in method_match)
-        has_domain = any(term in paper_text for term in domain_match)
+        has_method = any(_word_boundary_match(term, paper_text) for term in method_match)
+        has_domain = any(_word_boundary_match(term, paper_text) for term in domain_match)
         return has_method and has_domain
 
     # Fallback: basic phrase matching from query words
-    import re as _re
     query_words = _re.findall(r"[a-z]{3,}", query.lower())
     for n in (3, 2):
         for i in range(len(query_words) - n + 1):
@@ -1268,17 +1267,30 @@ def _is_relevant(paper, query: str, method_terms: list[str] = None, domain_terms
     return False
 
 
+def _word_boundary_match(term: str, text: str) -> bool:
+    r"""Check if term appears in text at word boundaries.
+
+    Uses \b regex anchors to prevent substring false positives:
+    - "vit" won't match "sensitivity" or "activity"
+    - "transformer" won't match "transformers" is OK (still relevant)
+    - "shm" won't match "asthma"
+    """
+    import re as _re
+    escaped = _re.escape(term)
+    return bool(_re.search(r'\b' + escaped + r'\b', text))
+
+
 def _expand_for_matching(terms: list[str]) -> list[str]:
     """Expand compound terms into sub-phrases for flexible matching.
 
-    "automated code compliance checking bim" generates:
-    - The original: "automated code compliance checking bim"
-    - 2-word sub-phrases: "code compliance", "compliance checking"
-    - Individual key words (4+ chars): "automated", "compliance", "checking"
+    "structural health monitoring damage detection" generates:
+    - The original phrase
+    - 3-word sub-phrases: "structural health monitoring", "health monitoring damage",
+      "monitoring damage detection"
 
-    This way "Code Compliance Checking in Building Information Modeling"
-    matches via the sub-phrase "code compliance" even though the full
-    compound term doesn't appear verbatim.
+    Only generates 3-word sub-phrases (not bigrams) to avoid overly generic
+    matches like "health monitoring" matching "mental health monitoring".
+    Bigrams are too ambiguous without surrounding context.
     """
     expanded = set()
     for term in terms:
@@ -1286,11 +1298,15 @@ def _expand_for_matching(terms: list[str]) -> list[str]:
         expanded.add(term)  # Keep original
 
         words = term.split()
-        if len(words) >= 2:
-            # Add 2-word sub-phrases
-            for i in range(len(words) - 1):
-                bigram = f"{words[i]} {words[i + 1]}"
-                expanded.add(bigram)
+        if len(words) >= 4:
+            # For long phrases (4+ words), generate 3-word sub-phrases
+            for i in range(len(words) - 2):
+                trigram = f"{words[i]} {words[i + 1]} {words[i + 2]}"
+                expanded.add(trigram)
+        elif len(words) == 3:
+            # Already a trigram — keep as-is (already added as original)
+            pass
+        # 2-word terms: keep only the original (no further splitting)
     return list(expanded)
 
 

@@ -39,14 +39,25 @@ class TestExpandForMatching:
         result = _expand_for_matching(["transformer"])
         assert "transformer" in result
 
-    def test_compound_generates_bigrams(self):
-        result = _expand_for_matching(["structural health monitoring"])
-        assert "structural health" in result
-        assert "health monitoring" in result
+    def test_long_phrase_generates_trigrams(self):
+        result = _expand_for_matching(["structural health monitoring damage detection"])
+        assert "structural health monitoring" in result
+        assert "health monitoring damage" in result
+        assert "monitoring damage detection" in result
 
-    def test_original_preserved(self):
+    def test_no_bigrams_generated(self):
+        """Bigrams are too generic — only trigrams from 4+ word phrases."""
+        result = _expand_for_matching(["structural health monitoring damage detection"])
+        assert "health monitoring" not in result
+        assert "damage detection" not in result
+
+    def test_trigram_kept_as_is(self):
         result = _expand_for_matching(["code compliance checking"])
         assert "code compliance checking" in result
+
+    def test_two_word_term_no_split(self):
+        result = _expand_for_matching(["bridge condition"])
+        assert result == ["bridge condition"]
 
 
 class TestParseCategories:
