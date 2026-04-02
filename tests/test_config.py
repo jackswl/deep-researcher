@@ -20,6 +20,6 @@ class TestConfigValidation:
         c = Config(max_iterations=100)
         assert c.max_iterations == 50  # clamped by __post_init__ before validate()
 
-    def test_breadth_clamped(self):
-        c = Config(breadth=10)
-        assert c.breadth == 5
+    def test_default_timeout(self):
+        c = Config()
+        assert c.timeout >= 1

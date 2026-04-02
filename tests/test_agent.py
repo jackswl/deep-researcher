@@ -2,62 +2,11 @@ import json
 
 from deep_researcher.agent import (
     _build_tiered_corpus,
-    _compact_messages,
-    _expand_for_matching,
-    _is_relevant,
     _parse_categories,
     _parse_merged_categories,
 )
 from deep_researcher.models import Paper
 from deep_researcher.tools.base import Tool, ToolRegistry, ToolResult
-
-
-class TestIsRelevant:
-    def test_matches_method_and_domain(self):
-        p = Paper(title="Transformer for structural health monitoring", abstract="attention mechanism for SHM")
-        assert _is_relevant(p, "query", ["transformer", "attention"], ["structural health monitoring"])
-
-    def test_rejects_method_only(self):
-        p = Paper(title="Transformer architecture improvements", abstract="self-attention mechanism")
-        assert not _is_relevant(p, "query", ["transformer"], ["structural health monitoring"])
-
-    def test_rejects_domain_only(self):
-        p = Paper(title="Structural health monitoring with sensors", abstract="SHM damage detection")
-        assert not _is_relevant(p, "query", ["transformer"], ["structural health monitoring"])
-
-    def test_empty_text_passes(self):
-        p = Paper(title="", abstract=None)
-        assert _is_relevant(p, "query", ["transformer"], ["shm"])
-
-    def test_no_terms_uses_fallback(self):
-        p = Paper(title="Deep learning for crack detection", abstract="")
-        assert _is_relevant(p, "deep learning crack detection", None, None)
-
-
-class TestExpandForMatching:
-    def test_single_word_kept(self):
-        result = _expand_for_matching(["transformer"])
-        assert "transformer" in result
-
-    def test_long_phrase_generates_trigrams(self):
-        result = _expand_for_matching(["structural health monitoring damage detection"])
-        assert "structural health monitoring" in result
-        assert "health monitoring damage" in result
-        assert "monitoring damage detection" in result
-
-    def test_no_bigrams_generated(self):
-        """Bigrams are too generic — only trigrams from 4+ word phrases."""
-        result = _expand_for_matching(["structural health monitoring damage detection"])
-        assert "health monitoring" not in result
-        assert "damage detection" not in result
-
-    def test_trigram_kept_as_is(self):
-        result = _expand_for_matching(["code compliance checking"])
-        assert "code compliance checking" in result
-
-    def test_two_word_term_no_split(self):
-        result = _expand_for_matching(["bridge condition"])
-        assert result == ["bridge condition"]
 
 
 class TestParseCategories:
@@ -135,30 +84,20 @@ class TestBuildTieredCorpus:
         assert result == ""
 
     def test_includes_abstracts_for_top_papers(self):
-        papers = [Paper(title=f"Paper {i}", abstract="Abstract text here", citation_count=100-i) for i in range(5)]
-        result = _build_tiered_corpus(papers, token_budget=15000)
+        indexed = [(i, Paper(title=f"Paper {i}", abstract="Abstract text here", citation_count=100-i)) for i in range(5)]
+        result = _build_tiered_corpus(indexed, token_budget=15000)
         assert "Abstract" in result
 
     def test_respects_budget(self):
-        papers = [Paper(title=f"Paper {i}", abstract="x" * 500, citation_count=100-i) for i in range(100)]
-        result = _build_tiered_corpus(papers, token_budget=500)
+        indexed = [(i, Paper(title=f"Paper {i}", abstract="x" * 500, citation_count=100-i)) for i in range(100)]
+        result = _build_tiered_corpus(indexed, token_budget=500)
         assert "additional papers" in result
 
-
-class TestCompactMessages:
-    def test_no_compaction_under_budget(self):
-        messages = [{"role": "user", "content": "short"}]
-        result = _compact_messages(messages, lambda m: 100)
-        assert result == messages
-
-    def test_compacts_old_tool_results(self):
-        messages = [
-            {"role": "user", "content": "query"},
-            {"role": "tool", "content": "Found 5 papers on Scopus:\n" + "x" * 500},
-            {"role": "tool", "content": "Found 3 papers on IEEE:\n" + "y" * 500},
-        ]
-        result = _compact_messages(messages, lambda m: 100_000)
-        assert "[Results compressed" in result[1]["content"]
+    def test_uses_global_indices(self):
+        """Paper [42] in category should show as [42], not [1]."""
+        indexed = [(41, Paper(title="Test Paper", abstract="Test", citation_count=10))]
+        result = _build_tiered_corpus(indexed, token_budget=15000)
+        assert "[42]" in result  # 0-based 41 -> 1-based 42
 
 
 # --- ToolRegistry input validation tests ---
