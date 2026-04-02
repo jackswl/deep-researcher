@@ -25,5 +25,10 @@ TIER1_SOURCES = frozenset({"scopus", "ieee", "pubmed"})
 # --- Concurrency ---
 MAX_TOOL_CONCURRENCY = 8            # Max parallel tool executions
 
+# --- Display / truncation ---
+ABSTRACT_MAX_CHARS = 250            # Max abstract length in corpus entries
+ABSTRACT_MIN_CUT = 150              # Minimum cut point for sentence-boundary truncation
+SYSTEMATIC_SEARCH_MAX_RESULTS = 10  # Results per query in systematic sweep
+
 # --- Relevance filtering ---
 MIN_CATEGORIZATION_COVERAGE = 0.3   # Warn if <30% of papers categorized

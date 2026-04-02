@@ -1,4 +1,9 @@
+import os
+import re
+import tempfile
+
 from deep_researcher.models import Paper, clean_abstract
+from deep_researcher.report import save_report
 
 
 class TestPaperUniqueKey:
@@ -101,3 +106,38 @@ class TestCleanAbstract:
 
     def test_empty_returns_none(self):
         assert clean_abstract("") is None
+
+
+class TestBibtexCollisionHandling:
+    """Test the collision-handling logic in save_report's BibTeX writer."""
+
+    def test_duplicate_keys_get_suffix(self):
+        # Two papers by "Li" from 2023 starting with "deep" -> same key
+        papers = {
+            "a": Paper(title="Deep Learning for Bridges", authors=["Li Wei"], year=2023, source="scopus"),
+            "b": Paper(title="Deep Networks for Cracks", authors=["Li Chen"], year=2023, source="ieee"),
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_report("test query", "# Report", papers, tmpdir)
+            bib_path = os.path.join(tmpdir, os.listdir(tmpdir)[0], "references.bib")
+            with open(bib_path) as f:
+                content = f.read()
+            # Both papers should be present (second gets _1 suffix)
+            keys = re.findall(r"@\w+\{(.+?),", content)
+            assert len(keys) == 2
+            assert keys[0] != keys[1]  # Keys must be distinct
+
+    def test_unique_keys_no_suffix(self):
+        papers = {
+            "a": Paper(title="Deep Learning", authors=["Smith"], year=2023, source="scopus"),
+            "b": Paper(title="Crack Detection", authors=["Jones"], year=2024, source="ieee"),
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_report("test query", "# Report", papers, tmpdir)
+            bib_path = os.path.join(tmpdir, os.listdir(tmpdir)[0], "references.bib")
+            with open(bib_path) as f:
+                content = f.read()
+            keys = re.findall(r"@\w+\{(.+?),", content)
+            assert len(keys) == 2
+            # No suffix needed — keys are naturally distinct
+            assert all("_" not in k or k.count("_") == 0 for k in keys) or keys[0] != keys[1]

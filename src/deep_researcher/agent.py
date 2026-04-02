@@ -6,6 +6,8 @@ from rich.table import Table
 
 from deep_researcher.config import Config
 from deep_researcher.constants import (
+    ABSTRACT_MAX_CHARS,
+    ABSTRACT_MIN_CUT,
     CATEGORIZE_BATCH_SIZE,
     CATEGORY_SYNTHESIS_TIMEOUT,
     CATEGORY_TOKEN_BUDGET,
@@ -17,6 +19,7 @@ from deep_researcher.constants import (
     MAX_SEARCH_TOKENS,
     MAX_SYNTHESIS_PAPERS,
     MIN_CATEGORIZATION_COVERAGE,
+    SYSTEMATIC_SEARCH_MAX_RESULTS,
     TIER1_SOURCES,
 )
 from deep_researcher.llm import LLMClient
@@ -315,10 +318,10 @@ def _build_paper_corpus(papers: dict[str, Paper]) -> str:
         entry += f"\n   {' | '.join(parts)}"
 
         if p.abstract:
-            abstract = p.abstract[:250]
-            if len(p.abstract) > 250:
+            abstract = p.abstract[:ABSTRACT_MAX_CHARS]
+            if len(p.abstract) > ABSTRACT_MAX_CHARS:
                 cut = abstract.rfind(". ")
-                abstract = abstract[:cut + 1] if cut > 150 else abstract + "..."
+                abstract = abstract[:cut + 1] if cut > ABSTRACT_MIN_CUT else abstract + "..."
             entry += f"\n   Abstract: {abstract}"
 
         # Track which databases found this paper
@@ -495,7 +498,7 @@ class ResearchAgent:
 
         def _search_one(tool, sq):
             try:
-                return tool.execute(query=sq, max_results=10)
+                return tool.execute(query=sq, max_results=SYSTEMATIC_SEARCH_MAX_RESULTS)
             except Exception:
                 logger.debug("Tool %s failed for query '%s'", tool.name, sq, exc_info=True)
                 return None
@@ -754,6 +757,9 @@ class ResearchAgent:
         self.console.print("  [cyan]Step 2/3: Synthesizing per category...[/cyan]")
         category_sections: list[tuple[str, str]] = []
         for cat_name, paper_indices in categories.items():
+            if self._cancel.is_set():
+                self.console.print("  [yellow]Synthesis cancelled.[/yellow]")
+                break
             cat_papers = [synthesis_papers[i] for i in paper_indices if i < len(synthesis_papers)]
             if not cat_papers:
                 continue
