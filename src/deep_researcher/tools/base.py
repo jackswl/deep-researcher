@@ -48,6 +48,34 @@ class Tool:
     def execute(self, **kwargs: Any) -> ToolResult:
         raise NotImplementedError
 
+    def validate_input(self, **kwargs: Any) -> dict[str, Any]:
+        """Validate input at tool boundary (claude-code Principle 5).
+        Checks required parameters and clamps max_results.
+        Returns validated kwargs dict.
+        """
+        required = self.parameters.get("required", [])
+        missing = [r for r in required if r not in kwargs]
+        if missing:
+            raise ValueError(f"Missing required parameters: {', '.join(missing)}")
+        if "max_results" in kwargs:
+            val = kwargs["max_results"]
+            if not isinstance(val, int) or val < 1:
+                kwargs["max_results"] = 10
+            elif val > 100:
+                kwargs["max_results"] = 100
+        return kwargs
+
+    def safe_execute(self, **kwargs: Any) -> ToolResult:
+        """Execute with validation and error wrapping (claude-code Principle 4).
+        Never raises — wraps all errors into ToolResult.
+        """
+        try:
+            validated = self.validate_input(**kwargs)
+            return self.execute(**validated)
+        except Exception as e:
+            logger.debug("Tool %s failed: %s", self.name, e, exc_info=True)
+            return ToolResult(text=f"Error: {e}")
+
     def to_openai_schema(self) -> dict[str, Any]:
         desc = self.description
         if self.category:
@@ -86,25 +114,7 @@ class ToolRegistry:
             kwargs = json.loads(arguments) if arguments else {}
         except json.JSONDecodeError:
             return ToolResult(text=f"Error: Invalid JSON arguments for tool '{name}'")
-        try:
-            # Validate required parameters
-            required = tool.parameters.get("required", [])
-            missing = [r for r in required if r not in kwargs]
-            if missing:
-                return ToolResult(text=f"Error: Missing required parameters for '{name}': {', '.join(missing)}")
-
-            # Clamp max_results to reasonable bounds
-            if "max_results" in kwargs:
-                val = kwargs["max_results"]
-                if not isinstance(val, int) or val < 1:
-                    kwargs["max_results"] = 10
-                elif val > 100:
-                    kwargs["max_results"] = 100
-
-            return tool.execute(**kwargs)
-        except Exception as e:
-            logger.exception("Tool %s failed", name)
-            return ToolResult(text=f"Error executing {name}: {e}")
+        return tool.safe_execute(**kwargs)
 
     def execute_partitioned(self, tool_calls: list[dict]) -> list[tuple[str, ToolResult]]:
         """Execute tool calls with Claude Code's partitioning pattern.

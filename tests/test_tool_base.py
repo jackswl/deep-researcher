@@ -61,3 +61,54 @@ class TestToolRegistryValidation:
         reg = self._make_registry()
         result = reg.execute("test_tool", "")
         assert "Missing required" in result.text
+
+
+class _FailingTool(Tool):
+    name = "failing_tool"
+    description = "Always fails"
+    parameters = {"type": "object", "properties": {}, "required": []}
+
+    def execute(self, **kwargs) -> ToolResult:
+        raise RuntimeError("Tool execution failed")
+
+
+class TestToolValidateInput:
+    def test_passes_with_required_params(self):
+        tool = _DummyTool()
+        result = tool.validate_input(query="test")
+        assert result["query"] == "test"
+
+    def test_raises_on_missing_required(self):
+        tool = _DummyTool()
+        try:
+            tool.validate_input(max_results=5)
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            assert "query" in str(e)
+
+    def test_clamps_max_results(self):
+        tool = _DummyTool()
+        result = tool.validate_input(query="test", max_results=999)
+        assert result["max_results"] == 100
+
+
+class TestToolSafeExecute:
+    def test_returns_result_on_success(self):
+        tool = _DummyTool()
+        result = tool.safe_execute(query="test")
+        assert "OK" in result.text
+
+    def test_wraps_validation_error(self):
+        tool = _DummyTool()
+        result = tool.safe_execute(max_results=5)  # missing required 'query'
+        assert result.text.startswith("Error:")
+
+    def test_wraps_execution_error(self):
+        tool = _FailingTool()
+        result = tool.safe_execute()
+        assert "Tool execution failed" in result.text
+
+    def test_safe_execute_never_raises(self):
+        tool = _FailingTool()
+        result = tool.safe_execute()
+        assert isinstance(result, ToolResult)
