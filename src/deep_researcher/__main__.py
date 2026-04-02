@@ -46,7 +46,14 @@ def main() -> None:
 
     if args.verbose:
         import logging
-        logging.basicConfig(level=logging.DEBUG, format="%(name)s %(levelname)s: %(message)s")
+        logging.basicConfig(level=logging.WARNING)  # Keep third-party libs quiet
+        logging.getLogger("deep_researcher").setLevel(logging.DEBUG)
+        logging.getLogger("deep_researcher").addHandler(
+            logging.StreamHandler()
+        )
+        logging.getLogger("deep_researcher").handlers[-1].setFormatter(
+            logging.Formatter("%(name)s %(levelname)s: %(message)s")
+        )
 
     console = Console()
 
