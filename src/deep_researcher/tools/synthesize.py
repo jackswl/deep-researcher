@@ -21,6 +21,7 @@ class SynthesisTool(Tool):
     name = "synthesize_category"
     description = "Write a literature review section for one category of papers"
     is_read_only = True
+    is_concurrency_safe = True
     category = "utility"
     quality_tier = 1
     parameters = {"type": "object", "properties": {}, "required": []}

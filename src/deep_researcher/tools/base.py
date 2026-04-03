@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import inspect
 import json
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from deep_researcher.models import ToolResult
 
 logger = logging.getLogger("deep_researcher")
+
+# Progress callback: (message, current, total)
+# Mirrors Claude Code's onProgress pattern in Tool.call()
+ProgressCallback = Callable[[str, int, int], None]
 
 
 class Tool:
@@ -14,6 +19,9 @@ class Tool:
     description: str = ""
     parameters: dict[str, Any] = {}
     is_read_only: bool = True
+    # Whether this tool can safely run concurrently with other tools
+    # (Claude Code Tool.isConcurrencySafe pattern)
+    is_concurrency_safe: bool = False
     # Taxonomy: helps the agent reason about which tools to use when
     # Values: "preprint", "index", "open_access", "publisher", "citation", "utility"
     category: str = "index"
@@ -63,12 +71,31 @@ class Tool:
                 kwargs["max_results"] = 100
         return kwargs
 
-    def safe_execute(self, **kwargs: Any) -> ToolResult:
+    def safe_execute(
+        self,
+        on_progress: ProgressCallback | None = None,
+        **kwargs: Any,
+    ) -> ToolResult:
         """Execute with validation and error wrapping (claude-code Principle 4).
-        Never raises — wraps all errors into ToolResult.
+        Never raises -- wraps all errors into ToolResult.
+
+        on_progress: optional callback for real-time progress reporting
+        (Claude Code onProgress pattern).
         """
         try:
             validated = self.validate_input(**kwargs)
+            # Only inject on_progress when the tool's execute() can accept it
+            # (has an explicit on_progress param or **kwargs). Prevents TypeError
+            # on tools with fixed-parameter signatures.
+            if on_progress is not None:
+                sig = inspect.signature(self.execute)
+                params = sig.parameters
+                accepts_progress = (
+                    "on_progress" in params
+                    or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+                )
+                if accepts_progress:
+                    validated["on_progress"] = on_progress
             return self.execute(**validated)
         except Exception as e:
             logger.debug("Tool %s failed: %s", self.name, e, exc_info=True)

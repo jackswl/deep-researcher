@@ -23,7 +23,8 @@ FALLBACK_MAX_PAPERS = 20            # Max papers for fallback synthesis
 TIER1_SOURCES = frozenset({"scopus", "ieee", "pubmed"})
 
 # --- Concurrency ---
-MAX_TOOL_CONCURRENCY = 8            # Max parallel tool executions
+MAX_TOOL_CONCURRENCY = 8            # Max parallel tool executions (enrichment HTTP)
+MAX_SYNTHESIS_CONCURRENCY = 3       # Max parallel LLM synthesis calls per phase
 
 # --- Display / truncation ---
 ABSTRACT_MAX_CHARS = 250            # Max abstract length in corpus entries

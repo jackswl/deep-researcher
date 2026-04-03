@@ -21,6 +21,7 @@ class ScholarSearchTool(Tool):
     name = "scholar_search"
     description = "Search Google Scholar for academic papers by query"
     is_read_only = True
+    is_concurrency_safe = False  # Web scraping, single request stream
     category = "index"
     quality_tier = 2
     parameters = {

@@ -17,6 +17,7 @@ from rich.panel import Panel
 from deep_researcher.config import Config
 from deep_researcher.constants import (
     CATEGORY_SYNTHESIS_TIMEOUT,
+    MAX_SYNTHESIS_CONCURRENCY,
     MAX_SYNTHESIS_PAPERS,
 )
 from deep_researcher.display import print_summary, save_results
@@ -163,7 +164,14 @@ class Orchestrator:
 
     def _run_enrichment(self, state: PipelineState) -> PipelineState:
         """Phase 2: Enrich papers via tool (concurrent HTTP)."""
+        total = len(state.papers)
+
+        def _on_enrichment_progress(msg: str, current: int, _total: int) -> None:
+            if current % 10 == 0 or current == total:
+                self.console.print(f"  [dim]{msg}[/dim]")
+
         result = self._enrichment_tool.safe_execute(
+            on_progress=_on_enrichment_progress,
             papers=list(state.papers.values()),
             email=self.config.email,
             cancel=self._cancel,
@@ -224,35 +232,55 @@ class Orchestrator:
         for name, indices in categories.items():
             self.console.print(f"    {name}: {len(indices)} papers")
 
-        # Step 2: Per-category synthesis (via tool, with timeout)
+        # Step 2: Per-category synthesis (concurrent, Claude Code parallel tool pattern)
         self.console.print("  [cyan]Step 2/3: Synthesizing per category...[/cyan]")
-        category_sections: list[tuple[str, str]] = []
-        for cat_name, paper_indices in categories.items():
-            if self._cancel.is_set():
-                self.console.print("  [yellow]Synthesis cancelled.[/yellow]")
-                break
-            cat_indexed = [(i, synthesis_papers[i]) for i in paper_indices if i < len(synthesis_papers)]
-            if not cat_indexed:
-                continue
-            self.console.print(f"    [cyan]{cat_name}[/cyan] ({len(cat_indexed)} papers)...")
 
-            try:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                    future = pool.submit(
-                        self._synthesize_tool.safe_execute,
-                        indexed_papers=cat_indexed,
-                        query=state.query,
-                        category_name=cat_name,
-                    )
+        # Build work items preserving category order
+        work_items: list[tuple[str, list[tuple[int, Paper]]]] = []
+        for cat_name, paper_indices in categories.items():
+            cat_indexed = [(i, synthesis_papers[i]) for i in paper_indices if i < len(synthesis_papers)]
+            if cat_indexed:
+                work_items.append((cat_name, cat_indexed))
+                self.console.print(f"    [cyan]{cat_name}[/cyan] ({len(cat_indexed)} papers)")
+
+        # Submit all categories concurrently (isConcurrencySafe=True)
+        results_by_name: dict[str, str] = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_SYNTHESIS_CONCURRENCY) as pool:
+            future_to_name: dict[concurrent.futures.Future, str] = {}
+            for cat_name, cat_indexed in work_items:
+                if self._cancel.is_set():
+                    break
+                future = pool.submit(
+                    self._synthesize_tool.safe_execute,
+                    indexed_papers=cat_indexed,
+                    query=state.query,
+                    category_name=cat_name,
+                )
+                future_to_name[future] = cat_name
+
+            for future in concurrent.futures.as_completed(future_to_name):
+                if self._cancel.is_set():
+                    self.console.print("  [yellow]Synthesis cancelled.[/yellow]")
+                    break
+                cat_name = future_to_name[future]
+                try:
                     result = future.result(timeout=CATEGORY_SYNTHESIS_TIMEOUT)
-                if not result.text.startswith("Synthesis failed"):
-                    category_sections.append((cat_name, result.text))
-                else:
-                    self.console.print(f"    [red]{result.text} — skipping[/red]")
-            except concurrent.futures.TimeoutError:
-                self.console.print(f"    [red]Timed out — skipping[/red]")
-            except Exception as e:
-                self.console.print(f"    [red]Failed: {e} — skipping[/red]")
+                    if not result.text.startswith("Synthesis failed"):
+                        results_by_name[cat_name] = result.text
+                        self.console.print(f"    [green]{cat_name} done[/green]")
+                    else:
+                        self.console.print(f"    [red]{result.text}[/red]")
+                except concurrent.futures.TimeoutError:
+                    self.console.print(f"    [red]{cat_name}: timed out[/red]")
+                except Exception as e:
+                    self.console.print(f"    [red]{cat_name}: {e}[/red]")
+
+        # Reassemble in original category order
+        category_sections: list[tuple[str, str]] = [
+            (name, results_by_name[name])
+            for name, _ in work_items
+            if name in results_by_name
+        ]
 
         if not category_sections:
             self.console.print("  [yellow]All categories failed — falling back[/yellow]")

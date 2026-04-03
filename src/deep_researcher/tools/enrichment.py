@@ -17,7 +17,7 @@ import httpx
 from deep_researcher.constants import MAX_TOOL_CONCURRENCY
 from deep_researcher.models import Paper, ToolResult
 from deep_researcher.parsing import titles_match
-from deep_researcher.tools.base import Tool
+from deep_researcher.tools.base import ProgressCallback, Tool
 
 logger = logging.getLogger("deep_researcher")
 
@@ -26,6 +26,7 @@ class EnrichmentTool(Tool):
     name = "enrich_papers"
     description = "Enrich papers with metadata from OpenAlex and CrossRef"
     is_read_only = True
+    is_concurrency_safe = True
     category = "utility"
     quality_tier = 1
     parameters = {
@@ -41,17 +42,21 @@ class EnrichmentTool(Tool):
         papers: list[Paper] | None = None,
         email: str = "",
         cancel: threading.Event | None = None,
+        on_progress: ProgressCallback | None = None,
+        **kwargs,
     ) -> ToolResult:
         if not papers:
             return ToolResult(text="No papers to enrich", papers=[])
 
         email = email or "deep-researcher@example.com"
         enriched_count = 0
+        completed_count = 0
+        total = len(papers)
 
         # Preserve input order: collect results by index (Issue 2 fix)
         results_by_index: list[Paper] = [copy.deepcopy(p) for p in papers]
 
-        with ThreadPoolExecutor(max_workers=min(len(papers), MAX_TOOL_CONCURRENCY)) as pool:
+        with ThreadPoolExecutor(max_workers=min(total, MAX_TOOL_CONCURRENCY)) as pool:
             future_to_idx: dict[Future, int] = {
                 pool.submit(self._enrich_one, paper, email): i
                 for i, paper in enumerate(papers)
@@ -67,6 +72,14 @@ class EnrichmentTool(Tool):
                         enriched_count += 1
                 except Exception:
                     pass  # keep the deepcopy fallback already in place
+
+                completed_count += 1
+                if callable(on_progress):
+                    on_progress(
+                        f"Enriched {completed_count}/{total}",
+                        completed_count,
+                        total,
+                    )
 
         enriched_papers = results_by_index
 
