@@ -19,6 +19,7 @@ from deep_researcher.constants import (
     CATEGORY_SYNTHESIS_TIMEOUT,
     MAX_SYNTHESIS_PAPERS,
 )
+from deep_researcher import cache as search_cache
 from deep_researcher.display import print_summary, save_results
 from deep_researcher.llm import LLMClient
 from deep_researcher.models import Paper, PipelineState
@@ -115,24 +116,34 @@ class Orchestrator:
         state = PipelineState(query=query)
         self._output_folder = get_output_folder(query, self.config.output_dir)
 
-        # Phase 1: Search
-        self.console.print("\n[bold blue]Phase 1: Searching Google Scholar...[/bold blue]")
-        state = self._run_search(state)
+        # Phase 1+2: Search & Enrich (with cache)
+        cached_papers = None if self.config.no_cache else search_cache.load(query)
 
-        if not state.papers:
-            self.console.print("[yellow]No papers found.[/yellow]")
-            return "No papers were found for this query."
+        if cached_papers is not None:
+            self.console.print(
+                f"\n[bold blue]Phase 1: Loaded {len(cached_papers)} papers from cache "
+                f"[dim](use --no-cache to re-fetch)[/dim][/bold blue]"
+            )
+            state = state.evolve(papers=cached_papers)
+        else:
+            self.console.print("\n[bold blue]Phase 1: Searching Google Scholar...[/bold blue]")
+            state = self._run_search(state)
 
-        # Phase 2: Enrich
-        self.console.print(f"\n[bold blue]Phase 2: Enriching {len(state.papers)} papers...[/bold blue]")
-        state = self._run_enrichment(state)
+            if not state.papers:
+                self.console.print("[yellow]No papers found.[/yellow]")
+                return "No papers were found for this query."
 
-        # Checkpoint
-        if state.papers and self._output_folder:
-            try:
-                save_checkpoint(state.papers, self._output_folder)
-            except Exception:
-                logger.debug("Checkpoint save failed", exc_info=True)
+            self.console.print(f"\n[bold blue]Phase 2: Enriching {len(state.papers)} papers...[/bold blue]")
+            state = self._run_enrichment(state)
+
+            # Checkpoint + cache after successful enrich
+            if state.papers and self._output_folder:
+                try:
+                    save_checkpoint(state.papers, self._output_folder)
+                except Exception:
+                    logger.debug("Checkpoint save failed", exc_info=True)
+            if state.papers:
+                search_cache.save(query, state.papers)
 
         # Phase 3: Synthesize
         self.console.print(f"\n[bold blue]Phase 3: Synthesizing {len(state.papers)} papers...[/bold blue]")

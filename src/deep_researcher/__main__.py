@@ -38,6 +38,7 @@ def main() -> None:
     parser.add_argument("--start-year", type=int, default=None, help="Filter papers published on or after this year")
     parser.add_argument("--end-year", type=int, default=None, help="Filter papers published on or before this year")
     parser.add_argument("--interactive", action="store_true", help="Ask clarifying questions before researching")
+    parser.add_argument("--no-cache", action="store_true", help="Bypass search cache and always re-fetch papers")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
     parser.add_argument("--version", action="version", version=f"deep-researcher {__version__}")
     args = parser.parse_args()
@@ -97,6 +98,8 @@ def main() -> None:
         config.end_year = args.end_year
     if args.interactive:
         config.interactive = True
+    if args.no_cache:
+        config.no_cache = True
 
     # Check for missing API key on cloud providers
     if not config.api_key or config.api_key in ("ollama", "lm-studio"):
