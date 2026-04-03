@@ -40,7 +40,7 @@ class Paper:
 
     def merge(self, other: Paper) -> None:
         """Merge metadata from another Paper representing the same work."""
-        if not self.abstract and other.abstract:
+        if other.abstract and len(other.abstract) > len(self.abstract or ""):
             self.abstract = other.abstract
         if not self.doi and other.doi:
             self.doi = other.doi
