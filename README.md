@@ -18,7 +18,7 @@
   <a href="#how-it-works">How It Works</a> &middot;
   <a href="#sample-output">Sample Output</a> &middot;
   <a href="#configuration">Configuration</a> &middot;
-  <a href="#how-this-was-built">Origin Story</a>
+  <a href="#architecture">Architecture</a>
 </p>
 
 ---
@@ -44,9 +44,11 @@ Deep Researcher combines **Google Scholar's semantic search** with **OpenAlex's 
 
 - **100 relevant papers** in ~30 seconds (vs 5+ minutes with database APIs and hundreds of rejected results)
 - **Full metadata** — DOIs, abstracts, journal names, citation counts, open access URLs
+- **Concurrent enrichment** — 8 parallel workers enrich papers via OpenAlex/CrossRef
 - **Structured synthesis** — categorized by theme, with per-category analysis and cross-category patterns
 - **Globally consistent citations** — `[N]` in the text matches `[N]` in the reference list
 - **No hallucinated sources** — every paper comes from Google Scholar, every claim cites a real abstract
+- **Principled tool-based architecture** — modeled after [Claude Code](https://github.com/anthropics/claude-code)'s agentic framework
 - **BibTeX + CSV output** ready for LaTeX/Overleaf or Excel
 - **Runs 100% locally** with Ollama — your queries never leave your machine
 
@@ -211,8 +213,9 @@ protocols for automatic repair of violations without human intervention.
                          │
           ┌──────────────▼──────────────┐
           │  Phase 2: ENRICHMENT        │
+          │  (concurrent — 8 workers)   │
           │                             │
-          │  For each paper:            │
+          │  For each paper (parallel): │
           │  1. OpenAlex title search   │  Full abstracts,
           │     → full abstract, DOI,   │  DOIs, journal
           │       journal, citations    │  names, open
@@ -225,21 +228,25 @@ protocols for automatic repair of violations without human intervention.
           └──────────────┬──────────────┘
                          │
               Enriched paper corpus
-              (100 papers, ~70% full abstracts)
+              (100 papers, ~60-70% full abstracts)
                          │
           ┌──────────────▼──────────────┐
           │  Phase 3: SYNTHESIS         │
+          │  (each step is a Tool)      │
           │                             │
-          │  Step 1: Categorize into    │
-          │    4-6 themes (batched)     │
-          │  Step 2: Per-category       │
-          │    detailed analysis        │
+          │  Step 1: CategorizeTool     │
+          │    → 4-6 themes (batched)   │
+          │  Step 2: SynthesisTool      │
+          │    → per-category analysis  │
           │    (no-think mode, 2.6x     │
           │     faster on local models) │
-          │  Step 3: Cross-category     │
-          │    patterns & gaps          │
+          │  Step 3: CrossAnalysisTool  │
+          │    → patterns & gaps        │
           │  Step 4: Assemble report    │
           │    with programmatic refs   │
+          │                             │
+          │  Fallback: FallbackTool     │
+          │    if categorization fails  │
           └──────────────┬──────────────┘
                          │
           ┌──────────────▼──────────────┐
