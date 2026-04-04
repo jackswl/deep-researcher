@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 
-from openai import APIError, APITimeoutError, OpenAI, RateLimitError
+from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
 from openai.types.chat import ChatCompletionMessage
 
 from deep_researcher.config import Config
@@ -55,16 +55,22 @@ class LLMClient:
                 wait = 2 ** attempt
                 logger.warning("API timeout (attempt %d/%d), waiting %ds", attempt + 1, self._max_retries, wait)
                 time.sleep(wait)
+            except APIConnectionError as e:
+                last_error = e
+                wait = 2 ** attempt
+                logger.warning("Connection error (attempt %d/%d), waiting %ds: %s", attempt + 1, self._max_retries, wait, e)
+                time.sleep(wait)
             except APIError as e:
                 err_str = str(e).lower()
                 # Detect models that don't support function calling
                 if any(hint in err_str for hint in ("tool", "function", "not supported", "invalid param")):
                     raise ToolCallingNotSupported(model=self.model, original_error=e) from e
                 # Retry on server errors (5xx), fail fast on client errors (4xx)
-                if e.status_code and 500 <= e.status_code < 600:
+                status_code = getattr(e, "status_code", None)
+                if status_code and 500 <= status_code < 600:
                     last_error = e
                     wait = 2 ** attempt
-                    logger.warning("Server error %s (attempt %d/%d)", e.status_code, attempt + 1, self._max_retries)
+                    logger.warning("Server error %s (attempt %d/%d)", status_code, attempt + 1, self._max_retries)
                     time.sleep(wait)
                 else:
                     raise
@@ -76,8 +82,9 @@ class LLMClient:
         Uses Ollama's native API with think:false to suppress reasoning tokens.
         Falls back to the standard OpenAI-compatible chat if not running locally.
         """
-        # Only use native API for local Ollama/LMStudio
-        if "localhost" not in self.client.base_url.host and "127.0.0.1" not in self.client.base_url.host:
+        # Only use native API for Ollama (port 11434) — other local proxies use OpenAI-compatible path
+        is_ollama = self.client.base_url.port == 11434
+        if not is_ollama:
             response = self.chat(messages)
             return response.content or ""
 
