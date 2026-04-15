@@ -34,6 +34,7 @@ class Config:
     core_api_key: str = ""
     scopus_api_key: str = ""
     ieee_api_key: str = ""
+    exa_api_key: str = ""
     timeout: int = 500  # ~8 min — local models need time for multi-step synthesis
     start_year: int | None = None
     end_year: int | None = None
@@ -56,6 +57,8 @@ class Config:
             self.scopus_api_key = _get(file_cfg, "scopus_api_key", "SCOPUS_API_KEY", "")
         if not self.ieee_api_key:
             self.ieee_api_key = _get(file_cfg, "ieee_api_key", "IEEE_API_KEY", "")
+        if not self.exa_api_key:
+            self.exa_api_key = _get(file_cfg, "exa_api_key", "EXA_API_KEY", "")
 
         iter_str = os.getenv("DEEP_RESEARCH_MAX_ITER") or str(file_cfg.get("max_iterations", ""))
         if iter_str:

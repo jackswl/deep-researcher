@@ -10,6 +10,7 @@ from deep_researcher.tools.core_search import CoreSearchTool
 from deep_researcher.tools.cross_analysis import CrossAnalysisTool
 from deep_researcher.tools.crossref import CrossrefSearchTool
 from deep_researcher.tools.enrichment import EnrichmentTool
+from deep_researcher.tools.exa_search import ExaSearchTool
 from deep_researcher.tools.fallback_synthesis import FallbackSynthesisTool
 from deep_researcher.tools.ieee_xplore import IEEEXploreSearchTool
 from deep_researcher.tools.open_access import OpenAccessTool
@@ -44,6 +45,7 @@ def build_tool_registry(config: Config, llm: LLMClient | None = None) -> ToolReg
         ScopusSearchTool(api_key=config.scopus_api_key),
         IEEEXploreSearchTool(api_key=config.ieee_api_key),
         OpenAccessTool(email=config.email),
+        ExaSearchTool(api_key=config.exa_api_key),
     ]
     for tool in database_tools:
         tool.set_year_range(config.start_year, config.end_year)
