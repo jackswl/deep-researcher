@@ -14,6 +14,7 @@ dependencies = [
     "httpx>=0.27.0",
     "rich>=13.0.0",
     "scholarly>=1.7.0",
+    "exa-py>=2.0.0",
 ]
 
 [project.optional-dependencies]
