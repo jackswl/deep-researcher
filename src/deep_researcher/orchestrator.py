@@ -16,9 +16,9 @@ from rich.panel import Panel
 
 from deep_researcher.config import Config
 from deep_researcher.constants import (
-    CATEGORY_SYNTHESIS_TIMEOUT,
-    MAX_SYNTHESIS_CONCURRENCY,
-    MAX_SYNTHESIS_PAPERS,
+    CATEGORY_EXTRACTION_TIMEOUT,
+    MAX_EXTRACTION_CONCURRENCY,
+    MAX_EXTRACTION_PAPERS,
 )
 from deep_researcher.display import print_summary, save_results
 from deep_researcher.llm import LLMClient
@@ -26,11 +26,10 @@ from deep_researcher.models import Paper, PipelineState
 from deep_researcher.report import get_output_folder, save_checkpoint
 from deep_researcher.tools.categorize import CategorizeTool
 from deep_researcher.tools.clarify import ClarifyTool
-from deep_researcher.tools.cross_analysis import CrossAnalysisTool
 from deep_researcher.tools.enrichment import EnrichmentTool
-from deep_researcher.tools.fallback_synthesis import FallbackSynthesisTool
+from deep_researcher.tools.extract import ExtractionTool
+from deep_researcher.tools.fallback_extract import FallbackExtractionTool
 from deep_researcher.tools.scholar_search import ScholarSearchTool
-from deep_researcher.tools.synthesize import SynthesisTool
 
 logger = logging.getLogger("deep_researcher")
 
@@ -57,9 +56,8 @@ class Orchestrator:
         self._enrichment_tool = EnrichmentTool()
         self._clarify_tool = ClarifyTool(llm=llm)
         self._categorize_tool = CategorizeTool(llm=llm)
-        self._synthesize_tool = SynthesisTool(llm=llm)
-        self._cross_analysis_tool = CrossAnalysisTool(llm=llm)
-        self._fallback_tool = FallbackSynthesisTool(llm=llm)
+        self._extract_tool = ExtractionTool(llm=llm)
+        self._fallback_tool = FallbackExtractionTool(llm=llm)
 
     def cancel(self) -> None:
         """Signal the orchestrator to stop gracefully."""
@@ -106,7 +104,7 @@ class Orchestrator:
         """Run the full research pipeline.
 
         State flows immutably through phases (Principle 3):
-        search -> enrich -> synthesize -> report
+        search -> enrich -> extract -> report
         """
         self.console.print(Panel(
             f"[bold]{query}[/bold]",
@@ -136,9 +134,9 @@ class Orchestrator:
             except Exception:
                 logger.debug("Checkpoint save failed", exc_info=True)
 
-        # Phase 3: Synthesize
-        self.console.print(f"\n[bold blue]Phase 3: Synthesizing {len(state.papers)} papers...[/bold blue]")
-        state = self._run_synthesis(state)
+        # Phase 3: Extract
+        self.console.print(f"\n[bold blue]Phase 3: Extracting from {len(state.papers)} papers...[/bold blue]")
+        state = self._run_extraction(state)
 
         print_summary(self.console, state)
         save_results(self.console, state, self.config.output_dir, self._output_folder or None)
@@ -191,68 +189,68 @@ class Orchestrator:
         self.console.print(f"  [green]{result.text}[/green]")
         return state.evolve(papers=enriched)
 
-    def _run_synthesis(self, state: PipelineState) -> PipelineState:
-        """Phase 3: Multi-step synthesis with layered error recovery.
+    def _run_extraction(self, state: PipelineState) -> PipelineState:
+        """Phase 3: Group papers by theme, then extract a table per theme.
 
         Recovery layers (Principle 4):
-        1. Per-category timeout/skip
-        2. Categorization failure -> fallback tool
-        3. All categories fail -> fallback tool
+        1. Per-theme timeout/skip
+        2. Grouping failure -> fallback tool
+        3. All themes fail -> fallback tool
         """
         def _sort_key(p: Paper) -> tuple:
             return (-(p.citation_count or 0), -(p.year or 0))
 
         all_papers = state.papers
-        if len(all_papers) > MAX_SYNTHESIS_PAPERS:
+        if len(all_papers) > MAX_EXTRACTION_PAPERS:
             sorted_all = sorted(all_papers.values(), key=_sort_key)
-            synthesis_papers = sorted_all[:MAX_SYNTHESIS_PAPERS]
+            extraction_papers = sorted_all[:MAX_EXTRACTION_PAPERS]
             self.console.print(
-                f"  [yellow]Corpus capped: synthesizing top {MAX_SYNTHESIS_PAPERS} of "
+                f"  [yellow]Corpus capped: extracting from top {MAX_EXTRACTION_PAPERS} of "
                 f"{len(all_papers)} papers (all saved to papers.json)[/yellow]"
             )
         else:
-            synthesis_papers = sorted(all_papers.values(), key=_sort_key)
+            extraction_papers = sorted(all_papers.values(), key=_sort_key)
 
-        state = state.evolve(synthesis_papers=synthesis_papers)
+        state = state.evolve(extraction_papers=extraction_papers)
 
-        # Step 1: Categorize (via tool)
-        self.console.print("  [cyan]Step 1/3: Categorizing papers...[/cyan]")
+        # Step 1: Group papers into themes (via tool)
+        self.console.print("  [cyan]Step 1/2: Grouping papers into themes...[/cyan]")
         cat_result = self._categorize_tool.safe_execute(
-            papers=synthesis_papers,
+            papers=extraction_papers,
             query=state.query,
         )
         categories = cat_result.data
 
         if not categories:
-            self.console.print("  [yellow]Categorization failed — falling back to single-pass synthesis[/yellow]")
-            fb_result = self._fallback_tool.safe_execute(papers=synthesis_papers, query=state.query)
+            self.console.print("  [yellow]Grouping failed: falling back to single-pass extraction[/yellow]")
+            fb_result = self._fallback_tool.safe_execute(papers=extraction_papers, query=state.query)
             return state.evolve(report=fb_result.text)
 
         state = state.evolve(categories=categories)
-        self.console.print(f"  [green]Found {len(categories)} categories[/green]")
+        self.console.print(f"  [green]Found {len(categories)} themes[/green]")
         for name, indices in categories.items():
             self.console.print(f"    {name}: {len(indices)} papers")
 
-        # Step 2: Per-category synthesis (concurrent, Claude Code parallel tool pattern)
-        self.console.print("  [cyan]Step 2/3: Synthesizing per category...[/cyan]")
+        # Step 2: Per-theme extraction (concurrent, Claude Code parallel tool pattern)
+        self.console.print("  [cyan]Step 2/2: Extracting per theme...[/cyan]")
 
-        # Build work items preserving category order
+        # Build work items preserving theme order
         work_items: list[tuple[str, list[tuple[int, Paper]]]] = []
         for cat_name, paper_indices in categories.items():
-            cat_indexed = [(i, synthesis_papers[i]) for i in paper_indices if i < len(synthesis_papers)]
+            cat_indexed = [(i, extraction_papers[i]) for i in paper_indices if i < len(extraction_papers)]
             if cat_indexed:
                 work_items.append((cat_name, cat_indexed))
                 self.console.print(f"    [cyan]{cat_name}[/cyan] ({len(cat_indexed)} papers)")
 
-        # Submit all categories concurrently (isConcurrencySafe=True)
+        # Submit all themes concurrently (isConcurrencySafe=True)
         results_by_name: dict[str, str] = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_SYNTHESIS_CONCURRENCY) as pool:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_EXTRACTION_CONCURRENCY) as pool:
             future_to_name: dict[concurrent.futures.Future, str] = {}
             for cat_name, cat_indexed in work_items:
                 if self._cancel.is_set():
                     break
                 future = pool.submit(
-                    self._synthesize_tool.safe_execute,
+                    self._extract_tool.safe_execute,
                     indexed_papers=cat_indexed,
                     query=state.query,
                     category_name=cat_name,
@@ -261,12 +259,12 @@ class Orchestrator:
 
             for future in concurrent.futures.as_completed(future_to_name):
                 if self._cancel.is_set():
-                    self.console.print("  [yellow]Synthesis cancelled.[/yellow]")
+                    self.console.print("  [yellow]Extraction cancelled.[/yellow]")
                     break
                 cat_name = future_to_name[future]
                 try:
-                    result = future.result(timeout=CATEGORY_SYNTHESIS_TIMEOUT)
-                    if not result.text.startswith("Synthesis failed"):
+                    result = future.result(timeout=CATEGORY_EXTRACTION_TIMEOUT)
+                    if not result.text.startswith("Extraction failed"):
                         results_by_name[cat_name] = result.text
                         self.console.print(f"    [green]{cat_name} done[/green]")
                     else:
@@ -276,7 +274,7 @@ class Orchestrator:
                 except Exception as e:
                     self.console.print(f"    [red]{cat_name}: {e}[/red]")
 
-        # Reassemble in original category order
+        # Reassemble in original theme order
         category_sections: list[tuple[str, str]] = [
             (name, results_by_name[name])
             for name, _ in work_items
@@ -284,21 +282,13 @@ class Orchestrator:
         ]
 
         if not category_sections:
-            self.console.print("  [yellow]All categories failed — falling back[/yellow]")
-            fb_result = self._fallback_tool.safe_execute(papers=synthesis_papers, query=state.query)
+            self.console.print("  [yellow]All themes failed: falling back[/yellow]")
+            fb_result = self._fallback_tool.safe_execute(papers=extraction_papers, query=state.query)
             return state.evolve(report=fb_result.text)
 
         state = state.evolve(category_sections=category_sections)
 
-        # Step 3: Cross-category analysis (via tool)
-        self.console.print("  [cyan]Step 3/3: Cross-category analysis...[/cyan]")
-        cross_result = self._cross_analysis_tool.safe_execute(
-            sections=category_sections,
-            query=state.query,
-        )
-        state = state.evolve(cross_section=cross_result.text)
-
-        # Step 4: Assemble report (programmatic — not LLM)
+        # Assemble report (programmatic, not LLM)
         report = _assemble_report(state)
         return state.evolve(report=report)
 
@@ -309,10 +299,9 @@ class Orchestrator:
 
 def _assemble_report(state: PipelineState) -> str:
     """Assemble the final report programmatically."""
-    papers = state.synthesis_papers
+    papers = state.extraction_papers
     categories = state.categories or {}
     sections = state.category_sections
-    cross_section = state.cross_section
 
     years = [p.year for p in papers if p.year]
     yr_range = f"{min(years)}-{max(years)}" if years else "unknown"
@@ -320,11 +309,11 @@ def _assemble_report(state: PipelineState) -> str:
 
     has_doi = sum(1 for p in papers if p.doi)
     parts = [
-        f"### {state.query}\n",
+        f"### Literature search: {state.query}\n",
         f"#### Coverage",
-        f"{total} papers found via Google Scholar, enriched via OpenAlex. "
+        f"{total} papers found via Google Scholar, enriched via OpenAlex/CrossRef. "
         f"Years {yr_range}. {has_doi} with DOIs.\n",
-        "#### Categories\n",
+        "#### Themes\n",
     ]
 
     for cat_name, content in sections:
@@ -333,10 +322,7 @@ def _assemble_report(state: PipelineState) -> str:
         parts.append(content)
         parts.append("")
 
-    parts.append(cross_section)
-    parts.append("")
-
-    # References (generated programmatically — never by LLM)
+    # References (generated programmatically, never by LLM)
     parts.append("#### References\n")
     for i, p in enumerate(papers, 1):
         author = p.authors[0] if p.authors else "Unknown"

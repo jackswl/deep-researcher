@@ -3,13 +3,13 @@
 </h1>
 
 <p align="center">
-  <strong>Search Google Scholar, enrich with OpenAlex, synthesize structured literature reviews — all locally.</strong>
+  <strong>Search Google Scholar, enrich with OpenAlex, and extract a structured literature matrix, all locally.</strong>
 </p>
 
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg?style=flat-square" alt="Python 3.10+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat-square" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/version-0.5.0-blue.svg?style=flat-square" alt="Version: 0.5.0">
+  <img src="https://img.shields.io/badge/version-0.6.0-blue.svg?style=flat-square" alt="Version: 0.6.0">
 </p>
 
 <p align="center">
@@ -21,12 +21,12 @@
 
 ---
 
-Deep Researcher searches **Google Scholar** for academically-ranked papers, enriches them with full metadata from **OpenAlex**, and uses a local LLM to write a **structured literature review** with consistent citations.
+Deep Researcher searches **Google Scholar** for academically-ranked papers, enriches them with full metadata from **OpenAlex** and **CrossRef**, and uses a local LLM to **extract a structured matrix** of each paper (method and key finding), grouped by theme.
 
 - **100 papers** from Google Scholar's semantic search, no keyword hacks, no irrelevant results
 - **Full metadata**: DOIs, abstracts, journal names, citation counts, open access URLs
-- **Structured synthesis**: papers categorized by theme, with per-category analysis and cross-category patterns
-- **Consistent `[N]` citations**: every reference in the text matches the reference list
+- **Structured extraction**: papers grouped by theme, each reduced to the method and key finding stated in its abstract
+- **Consistent `[N]` references**: every row in the tables matches the reference list
 - **BibTeX + CSV output** ready for LaTeX/Overleaf or Excel
 - **Runs locally** with Ollama. Your queries never leave your machine
 - **Tool-based agentic architecture** inspired by [Claude Code](https://github.com/anthropics/claude-code)
@@ -87,17 +87,17 @@ deep-researcher "quantum computing algorithms" --provider deepseek
 
 1. **Search**: Queries Google Scholar for up to 100 semantically-ranked academic papers
 2. **Enrich**: Concurrent workers (8 threads) look up each paper in OpenAlex/CrossRef for full abstracts, DOIs, and journal metadata
-3. **Synthesize**: LLM categorizes papers into themes, writes per-category analysis, then identifies cross-category patterns and gaps
+3. **Extract**: LLM groups papers into themes, then extracts a table per theme (method and key finding for each paper, taken only from the abstract)
 
 Each run produces:
 
 ```
 output/2026-04-02-161823-large-language-models-for-automated-code/
-├── report.md        # Categorized literature review
+├── report.md        # Themed extraction tables
 ├── references.bib   # BibTeX (import into LaTeX/Overleaf)
 ├── papers.json      # Full metadata for every paper
 ├── papers.csv       # Same data as CSV
-└── metadata.json    # Research stats
+└── metadata.json    # Search stats
 ```
 
 ---
@@ -105,143 +105,48 @@ output/2026-04-02-161823-large-language-models-for-automated-code/
 ## Sample Output
 
 <details open>
-<summary><strong>Full first category shown, remaining categories truncated for brevity</strong></summary>
+<summary><strong>First theme shown in full, remaining themes truncated for brevity</strong></summary>
 
 ```markdown
-### large language model for automated code compliance for BIM
+### Literature search: large language models for automated code compliance in BIM
 
 #### Coverage
-100 papers found via Google Scholar, enriched via OpenAlex. Years 2010-2026. 96 with DOIs.
+100 papers found via Google Scholar, enriched via OpenAlex/CrossRef. Years 2010-2026. 96 with DOIs.
 
-#### Categories
+#### Themes
 
-##### Automated IFC-Based Compliance Processing & Reasoning (8 papers)
+##### Automated IFC-Based Compliance Processing (8 papers)
 
-### What this group does
-This category focuses on transitioning from manual, error-prone regulatory assessments
-to automated processes that directly interpret Building Information Modeling (BIM) data.
-Early foundational work established the feasibility of checking designs against codes
-using visual languages and IFC schemas [2, 3], while later studies expanded these concepts
-to include semantic alignment of regulatory texts [5] and visual programming logic [6].
-Recent developments further integrate artificial intelligence to automate the scoring of
-complex metrics like Industrialized Building System adoption from IFC streams [75].
-Collectively, these studies aim to replace inconsistent human judgment with consistent,
-data-driven compliance verification.
+| Ref | Paper | Year | Method | Key finding (as stated) | Cites |
+|-----|-------|------|--------|-------------------------|-------|
+| [2] | Automated code compliance checking based on a visual language and BIM | 2015 | Visual language + IFC | feasibility of checking designs against codes | 51 |
+| [3] | Automated compliance checking using building information models | 2010 | IFC schema checking | reduces time and ambiguity in manual reviews | not stated |
+| [4] | A review on BIM-based automated code compliance checking | 2017 | Literature review | maps the evolution of automated compliance | 57 |
+| [5] | Knowledge-informed semantic alignment and rule interpretation | 2022 | Semantic alignment | handles complex, changing regulations | 118 |
+| [6] | Automated BIM data validation integrating open-standard schema | 2019 | Visual programming + IFC | validates BIM data against open standards | 37 |
+| [7] | BIM: automated code checking and compliance processes | 2018 | Rule-based checking | objective fire-safety assessment | 35 |
+| [75] | AI-driven IFC processing for automated IBS scoring | 2026 | AI-driven IFC processing | replaces manual, inconsistent IBS assessment | not stated |
 
-### Key methods
-The group employs a progression of methods ranging from rule-based checking of IFC geometry
-to semantic reasoning. Early approaches utilized visual languages to map building designs
-to specific building regulations [2, 3], while Ghannad et al. [6] integrated open-standard
-schemas with visual programming languages to validate BIM data. To address the complexity
-of regulatory language, Zheng et al. [5] introduced knowledge-informed semantic alignment
-to interpret rules precisely. Specific domain applications were also explored, such as using
-automated models to review fire safety compliance [7] and AI-driven algorithms to calculate
-IBS scoring from IFC files [75]. A broader review by Ismail et al. [4] contextualized these
-technical methods within the historical evolution of automated compliance systems.
+##### NLP-Driven Regulatory Interpretation (20 papers)
+| Ref | Paper | Year | Method | Key finding (as stated) | Cites |
+| ... truncated ... |
 
-### Main findings
-Collectively, this group demonstrates that automating code compliance checking significantly
-reduces the time consumption and ambiguity inherent in manual design reviews [3, 4]. By
-leveraging BIM and IFC data, these systems enable precise, objective assessments of fire
-safety [7] and industrialized building system levels [75]. The integration of semantic
-alignment techniques has been shown to overcome the challenges of interpreting frequently
-changing and complex building regulations [5]. The consistent finding across these studies
-is that automation enhances consistency for both designers and enforcers while mitigating
-human error [3, 4].
-
-### Limitations & gaps (your analysis)
-A common limitation across these studies is the heavy reliance on structured IFC data, which
-may struggle with the unstructured, natural language nuances of specific local building codes
-that evolve rapidly. This group does not sufficiently address the dynamic nature of regulatory
-updates; while Zheng et al. [5] discuss semantic alignment, there is no explicit evidence in
-the abstracts that the systems automatically ingest and adapt to new laws in real-time without
-manual reconfiguration. Furthermore, the focus remains heavily on geometric and semantic
-validation, leaving a gap in the integration of performance-based simulation data required
-for high-level regulatory compliance. Finally, the reliance on visual programming and specific
-schema standards suggests a potential barrier to adoption by firms not yet using open standards
-or those with legacy data environments.
-
-| Ref | Paper | Year | Method | Key Finding | Citations |
-|-----|-------|------|--------|-------------|-----------|
-| [2] | Automated code compliance checking based on a visual language and building information modeling | 2015 | Visual language + BIM | Feasibility of checking designs against codes | 51 |
-| [3] | Automated compliance checking using building information models | 2010 | IFC schema checking | Reduces time and ambiguity in manual reviews | - |
-| [4] | A review on BIM-based automated code compliance checking system | 2017 | Literature review | Historical evolution of automated compliance | 57 |
-| [5] | Knowledge-informed semantic alignment and rule interpretation | 2022 | Semantic alignment | Overcomes complex, changing regulation challenges | 118 |
-| [6] | Automated BIM data validation integrating open-standard schema | 2019 | Visual programming + IFC | Validates BIM data against open standards | 37 |
-| [7] | Building information modeling: Automated code checking and compliance processes | 2018 | Fire safety compliance | Precise, objective fire safety assessments | 35 |
-| [75] | AI-Driven IFC Processing for Automated IBS Scoring | 2026 | AI-driven IFC processing | Replaces manual, inconsistent IBS assessment | - |
-
-##### NLP-Driven Regulatory Interpretation & Semantic Analysis (20 papers)
-...
-
-##### Generative LLM Methodologies for Model Creation & Specification Mapping (10 papers)
-...
-
-##### Multi-Agent Systems & Frameworks for Regulatory Reasoning (10 papers)
-...
-
-##### Knowledge Graph & Hybrid AI Systems for Rule-Based Compliance (19 papers)
-...
-
-##### Operational Efficiency & Lifecycle Integration Workflows (18 papers)
-...
-
-#### Cross-Category Patterns
-*   **Convergence on Semantic Bridging:** A dominant pattern is the shift from purely
-    syntactic or visual analysis toward deep semantic alignment. Papers like [5] and [33]
-    bridge the gap between Knowledge Graph approaches and NLP-Driven methods by embedding
-    regulatory texts into ontologies, effectively merging semantic analysis with structural
-    rigor.
-*   **The "Generation-Verification" Loop:** Generative LLM Methodologies (e.g., [74]) and
-    Operational Efficiency workflows are converging; the ability to generate constructible
-    models from text is now being used as a pre-computation step to reduce the verification
-    load. The workflow is no longer just "Check vs. Create" but an iterative
-    "Generate -> Verify -> Refine" cycle.
-*   **Agentification of Knowledge:** The distinction between standalone NLP models and
-    Multi-Agent Systems is blurring. Papers like [19] and [1] suggest that complex regulatory
-    reasoning previously handled by static Knowledge Graphs is now being decomposed into
-    autonomous agent workflows.
-
-#### Contradictions & Tensions
-*   **Generative Hallucination vs. Regulatory Rigor:** Generative approaches prioritize
-    flexibility [74], which risks hallucinating non-compliant features, whereas Knowledge
-    Graph approaches [5], [33] prioritize precise rule adherence. No consensus on how much
-    "creative license" an LLM should have when generating components that must satisfy legal
-    codes.
-*   **Static Ontology vs. Dynamic Language:** Knowledge Graph systems rely on static,
-    pre-defined ontologies [33], while NLP-Driven systems aim to handle implicit and evolving
-    language [8]. Bridging these without losing precision or adaptability remains unresolved.
-
-#### Gaps & Opportunities
-*   **Adversarial Robustness:** No study has formally quantified the "compliance failure rate"
-    when a Generative LLM creates a model that passes initial checks but fails rigorous
-    Knowledge Graph validation under adversarial conditions.
-*   **Real-Time Multi-Agent Debate:** No research addresses how agents can "debate" ambiguous
-    regulatory clauses in real-time to reach consensus before generating a model.
-*   **Edge AI for Site Compliance:** All current frameworks assume cloud-based LLM access.
-    No research exists on distilling regulatory reasoning onto edge devices for on-site
-    compliance checks where connectivity is unreliable.
+##### Generative LLM Methodologies (10 papers)
+| ... truncated ... |
 
 #### References
-[1] R Amor et al. (2021). The promise of automated compliance checking. *Developments in
-    the Built Environment*. DOI: 10.1016/j.dibe.2020.100039
-[2] C Preidel et al. (2015). Automated code compliance checking based on a visual language
-    and building information modeling. *Proceedings of the ISARC*. DOI: 10.22260/isarc2015/0033
-[3] D Greenwood (2010). Automated compliance checking using building information models.
-    *Northumbria Research Link*.
-[4] AS Ismail et al. (2017). A review on BIM-based automated code compliance checking system.
-    *2017 International Conference on Research and Innovation in Information Systems*.
-    DOI: 10.1109/icriis.2017.8002486
-[5] Z Zheng et al. (2022). Knowledge-informed semantic alignment and rule interpretation for
-    automated compliance checking. *Automation in Construction*. DOI: 10.1016/j.autcon.2022.104524
+[1] R Amor et al. (2021). The promise of automated compliance checking. *Developments in the Built Environment*. DOI: 10.1016/j.dibe.2020.100039
+[2] C Preidel et al. (2015). Automated code compliance checking based on a visual language and building information modeling. *Proceedings of the ISARC*. DOI: 10.22260/isarc2015/0033
+[3] D Greenwood (2010). Automated compliance checking using building information models. *Northumbria Research Link*.
+[4] AS Ismail et al. (2017). A review on BIM-based automated code compliance checking system. *ICRIIS 2017*. DOI: 10.1109/icriis.2017.8002486
+[5] Z Zheng et al. (2022). Knowledge-informed semantic alignment and rule interpretation for automated compliance checking. *Automation in Construction*. DOI: 10.1016/j.autcon.2022.104524
 ...
-[100] Orchestrating LLM-Powered Workflows for Autodesk Revit via Model Context Protocol:
-      A Multi-Agent Framework for Intelligent BIM Automation.
+[100] Orchestrating LLM-Powered Workflows for Autodesk Revit via Model Context Protocol.
 ```
 
 </details>
 
-> Every `[N]` in the text matches `[N]` in the reference list. No hallucinated sources. Every paper comes from Google Scholar, every claim cites a real abstract.
+> Every `[N]` in the tables matches `[N]` in the reference list. Every row is extracted from a real abstract: when an abstract does not state the method or finding, the cell reads "not stated" rather than inventing one.
 
 ---
 
@@ -270,10 +175,10 @@ deep-researcher "federated learning" --start-year 2020
 # Specific time window
 deep-researcher "attention mechanisms" --start-year 2017 --end-year 2023
 
-# Interactive mode — refine your question first
+# Interactive mode: refine your question first
 deep-researcher "machine learning in healthcare" --interactive
 
-# Cloud provider for faster synthesis
+# Cloud provider for faster extraction
 deep-researcher "quantum computing" --provider groq --start-year 2022
 ```
 
@@ -315,7 +220,7 @@ Priority: CLI args > environment variables > config file > defaults.
 
 ## Models
 
-The LLM is only used for **synthesis** (categorization and writing). Search is handled by Google Scholar — no LLM involved. Even smaller models work well.
+The LLM is only used to **group papers into themes** and **extract** the per-paper table. Search is handled by Google Scholar, no LLM involved. Even smaller models work well.
 
 Any OpenAI-compatible model works. Use `--model` to override the default:
 
@@ -326,7 +231,7 @@ deep-researcher "your query" --model gemma4
 | Model | ID | Notes |
 |---|---|---|
 | Qwen 3.5 9B | `qwen3.5:9b` | **Default.** Good quality/size ratio |
-| Gemma 4 | `gemma4` | 128K context, strong synthesis |
+| Gemma 4 | `gemma4` | 128K context, reliable extraction |
 | Qwen 3.5 27B | `qwen3.5:27b` | Higher quality, needs 16GB+ VRAM |
 | Llama 4 Scout | `llama4:scout` | 10M context |
 | DeepSeek V3.2 | `deepseek-v3.2` | Strong reasoning |

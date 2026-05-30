@@ -1,7 +1,8 @@
-# src/deep_researcher/tools/synthesize.py
-"""Per-category synthesis tool.
+# src/deep_researcher/tools/extract.py
+"""Per-theme extraction tool.
 
-Takes papers in one category and produces an LLM-written literature review section.
+Takes the papers in one theme and produces a structured extraction table
+(one row per paper), grounded strictly in each abstract. No prose.
 """
 from __future__ import annotations
 
@@ -11,15 +12,15 @@ from deep_researcher.constants import CATEGORY_TOKEN_BUDGET
 from deep_researcher.llm import LLMClient
 from deep_researcher.models import Paper, ToolResult
 from deep_researcher.parsing import build_tiered_corpus
-from deep_researcher.prompts import CATEGORY_SYNTHESIS_PROMPT
+from deep_researcher.prompts import CATEGORY_EXTRACTION_PROMPT
 from deep_researcher.tools.base import Tool
 
 logger = logging.getLogger("deep_researcher")
 
 
-class SynthesisTool(Tool):
-    name = "synthesize_category"
-    description = "Write a literature review section for one category of papers"
+class ExtractionTool(Tool):
+    name = "extract_theme"
+    description = "Extract a structured table of papers for one theme"
     is_read_only = True
     is_concurrency_safe = True
     category = "utility"
@@ -38,10 +39,10 @@ class SynthesisTool(Tool):
         **kwargs,
     ) -> ToolResult:
         if not indexed_papers or not self._llm:
-            return ToolResult(text="No papers to synthesize")
+            return ToolResult(text="No papers to extract")
 
         corpus = build_tiered_corpus(indexed_papers, token_budget=token_budget)
-        prompt = CATEGORY_SYNTHESIS_PROMPT.format(
+        prompt = CATEGORY_EXTRACTION_PROMPT.format(
             query=query,
             category=category_name,
             count=len(indexed_papers),
@@ -51,9 +52,9 @@ class SynthesisTool(Tool):
         try:
             content = self._llm.chat_no_think([
                 {"role": "system", "content": prompt},
-                {"role": "user", "content": f"Write the synthesis for: {category_name}"},
+                {"role": "user", "content": f"Extract the table for: {category_name}"},
             ])
             return ToolResult(text=content)
         except Exception as e:
-            logger.warning("Synthesis for '%s' failed: %s", category_name, e)
-            return ToolResult(text=f"Synthesis failed for {category_name}: {e}")
+            logger.warning("Extraction for '%s' failed: %s", category_name, e)
+            return ToolResult(text=f"Extraction failed for {category_name}: {e}")

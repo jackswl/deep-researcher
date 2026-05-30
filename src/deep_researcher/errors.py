@@ -40,8 +40,8 @@ class SearchError(DeepResearcherError):
         super().__init__(f"Search tool '{tool_name}' failed: {reason}")
 
 
-class SynthesisError(DeepResearcherError):
-    """Synthesis phase failed."""
+class ExtractionError(DeepResearcherError):
+    """Extraction phase failed."""
 
 
 class ContextOverflowError(DeepResearcherError):

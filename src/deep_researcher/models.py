@@ -174,9 +174,8 @@ class PipelineState:
     query: str
     papers: dict[str, Paper] = field(default_factory=dict)
     categories: dict[str, list[int]] | None = None
-    synthesis_papers: list[Paper] = field(default_factory=list)
+    extraction_papers: list[Paper] = field(default_factory=list)
     category_sections: list[tuple[str, str]] = field(default_factory=list)
-    cross_section: str = ""
     report: str = ""
 
     def evolve(self, **kwargs: Any) -> PipelineState:
@@ -189,8 +188,8 @@ class PipelineState:
         defaults: dict[str, Any] = {}
         if "papers" not in kwargs:
             defaults["papers"] = copy.copy(self.papers)
-        if "synthesis_papers" not in kwargs:
-            defaults["synthesis_papers"] = list(self.synthesis_papers)
+        if "extraction_papers" not in kwargs:
+            defaults["extraction_papers"] = list(self.extraction_papers)
         if "category_sections" not in kwargs:
             defaults["category_sections"] = list(self.category_sections)
         if "categories" not in kwargs and self.categories is not None:

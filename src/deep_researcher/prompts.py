@@ -50,70 +50,33 @@ Rules:
 - Final category names should be descriptive (not generic like "Other")
 """
 
-CATEGORY_SYNTHESIS_PROMPT = """\
-You are a research analyst writing one section of a detailed literature review on: "{query}"
+CATEGORY_EXTRACTION_PROMPT = """\
+You are a research librarian compiling a literature screening matrix on: "{query}"
 
-This section covers the category: **{category}** ({count} papers)
+This theme covers: **{category}** ({count} papers)
 
-## Papers in this category
+## Papers in this theme
 {corpus}
 
-## Write this section. Reference papers by [number].
+## Task
+Produce ONE markdown table that extracts the key details of each paper. \
+Use exactly these columns and header:
 
-**What this group does:**
-Write a paragraph (4-6 sentences) explaining the shared approach/theme.
-Reference individual papers: e.g., "Smith et al. [1] introduced X. Jones et al. [2] extended this by Y."
+| Ref | Paper | Year | Method | Key finding (as stated) | Cites |
+|-----|-------|------|--------|-------------------------|-------|
 
-**Key methods:**
-Write a paragraph describing the specific methods and techniques.
-For each method, cite which paper(s) used it.
+Use the [number] shown beside each paper above as its Ref. Put one row per paper.
 
-**Main findings:**
-Write a paragraph on collective findings. Include specific results ONLY if the \
-abstract explicitly states them (e.g., accuracy percentages, performance metrics). \
-Do NOT infer, generalize, or fabricate results that are not in the abstracts.
-
-**Limitations & gaps (your analysis):**
-Write YOUR OWN analysis of common weaknesses and gaps across this group. \
-This is your synthesis — do NOT attribute these observations to specific papers \
-with [number] citations. Instead write: "A common limitation across these studies is..." \
-or "This group does not address..."
-
-| Ref | Paper | Year | Method | Key Finding | Citations |
-|-----|-------|------|--------|-------------|-----------|
-(Include EVERY paper listed above in the table)
-
-## CRITICAL RULES
-- ONLY state what the abstracts explicitly say. If a metric is not in the abstract, do NOT invent it.
-- When citing [N], the claim MUST come from that paper's abstract above. Verify before writing.
-- The Limitations section is YOUR analysis — do NOT fake-attribute observations to papers.
-- Include ALL papers from this category in the table.
-- Be direct. No filler. No "In recent years..."
-- Do NOT write references or cross-category analysis — just this one section.
-"""
-
-CROSS_CATEGORY_PROMPT = """\
-You are a research analyst. You've categorized papers on "{query}" into these groups:
-
-{category_summaries}
-
-Now write ONLY these sections:
-
-#### Cross-Category Patterns
-What patterns emerge across categories? Which are converging? \
-What contradictions exist? Which papers bridge multiple categories?
-
-#### Gaps & Opportunities
-Be specific. Name concrete research questions nobody has addressed. \
-Point to specific method/domain combinations that haven't been tried.
-
-#### Open Access Papers
-List any papers with free full-text URLs mentioned above.
-
-Rules:
-- Be direct and specific — no vague generalities
-- Reference specific paper numbers when possible
-- Do NOT repeat the per-category analysis
+## Rules
+- Extract ONLY what each abstract explicitly states. Do not infer, generalize, or invent.
+- Method: the approach or technique the abstract describes. If the abstract does not \
+state it, write "not stated".
+- Key finding (as stated): the specific result the abstract reports. If none is stated, \
+write "not stated".
+- Year and Cites come from the metadata shown for each paper. Leave blank only if absent.
+- Keep every cell short. Shorten long titles. Do not use line breaks inside a cell.
+- Include EVERY paper listed above, in the order given, one row each.
+- Output ONLY the table. No prose, no headings, no commentary before or after it.
 """
 
 CLARIFY_PROMPT = """\

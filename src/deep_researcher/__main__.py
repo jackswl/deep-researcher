@@ -26,7 +26,7 @@ PROVIDERS: dict[str, dict[str, str]] = {
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="deep-researcher",
-        description="An agentic academic research assistant that searches multiple databases and produces literature reviews.",
+        description="Search Google Scholar, enrich the metadata, and extract a structured literature matrix of the papers.",
     )
     parser.add_argument("query", nargs="?", help="Research question to investigate")
     parser.add_argument("--provider", choices=list(PROVIDERS.keys()), help="LLM provider (auto-configures base URL and model)")
@@ -56,7 +56,7 @@ def main() -> None:
     console = Console()
 
     if not args.query:
-        console.print("[bold]Deep Researcher[/bold] - Academic Literature Review Agent\n")
+        console.print("[bold]Deep Researcher[/bold] - Academic Literature Search & Extraction\n")
         console.print("Usage: deep-researcher \"your research question here\"\n")
         console.print("Examples:")
         console.print('  deep-researcher "transformer models in structural health monitoring"')
@@ -76,7 +76,7 @@ def main() -> None:
         config.base_url = preset["base_url"]
         config.api_key = preset["api_key"]
         config.model = preset["default_model"]
-        # Local models need longer timeouts for synthesis (large prompt + long response)
+        # Local models need longer timeouts for extraction (large prompt + long response)
         if args.provider in ("ollama", "lmstudio"):
             config.timeout = 300
 

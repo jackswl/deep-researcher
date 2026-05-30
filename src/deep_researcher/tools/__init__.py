@@ -7,17 +7,16 @@ from deep_researcher.tools.base import ToolRegistry
 from deep_researcher.tools.categorize import CategorizeTool
 from deep_researcher.tools.clarify import ClarifyTool
 from deep_researcher.tools.core_search import CoreSearchTool
-from deep_researcher.tools.cross_analysis import CrossAnalysisTool
 from deep_researcher.tools.crossref import CrossrefSearchTool
 from deep_researcher.tools.enrichment import EnrichmentTool
-from deep_researcher.tools.fallback_synthesis import FallbackSynthesisTool
+from deep_researcher.tools.extract import ExtractionTool
+from deep_researcher.tools.fallback_extract import FallbackExtractionTool
 from deep_researcher.tools.ieee_xplore import IEEEXploreSearchTool
 from deep_researcher.tools.open_access import OpenAccessTool
 from deep_researcher.tools.openalex import OpenAlexSearchTool
 from deep_researcher.tools.pubmed import PubMedSearchTool
 from deep_researcher.tools.scholar_search import ScholarSearchTool
 from deep_researcher.tools.scopus import ScopusSearchTool
-from deep_researcher.tools.synthesize import SynthesisTool
 
 
 def build_tool_registry(config: Config, llm: LLMClient | None = None) -> ToolRegistry:
@@ -30,9 +29,8 @@ def build_tool_registry(config: Config, llm: LLMClient | None = None) -> ToolReg
     if llm:
         registry.register(ClarifyTool(llm=llm))
         registry.register(CategorizeTool(llm=llm))
-        registry.register(SynthesisTool(llm=llm))
-        registry.register(CrossAnalysisTool(llm=llm))
-        registry.register(FallbackSynthesisTool(llm=llm))
+        registry.register(ExtractionTool(llm=llm))
+        registry.register(FallbackExtractionTool(llm=llm))
 
     # Database tools
     database_tools = [

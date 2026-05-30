@@ -34,7 +34,7 @@ class Config:
     core_api_key: str = ""
     scopus_api_key: str = ""
     ieee_api_key: str = ""
-    timeout: int = 500  # ~8 min — local models need time for multi-step synthesis
+    timeout: int = 500  # ~8 min: local models need time for multi-step extraction
     start_year: int | None = None
     end_year: int | None = None
     interactive: bool = False
