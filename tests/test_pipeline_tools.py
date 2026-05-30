@@ -1,4 +1,4 @@
-"""Tests for pipeline tools (search, enrichment, categorize, synthesize, cross-analysis)."""
+"""Tests for pipeline tools (search, enrichment, categorize, extract)."""
 from __future__ import annotations
 
 import threading
@@ -198,56 +198,51 @@ class TestCategorizeTool:
         assert result.data is None
 
 
-class TestSynthesisTool:
-    def _make_tool(self, llm_response="## Section\nSynthesis content here"):
-        from deep_researcher.tools.synthesize import SynthesisTool
-        mock_llm = MagicMock()
-        mock_llm.chat_no_think.return_value = llm_response
-        return SynthesisTool(llm=mock_llm)
+class TestExtractionTool:
+    TABLE = (
+        "| Ref | Paper | Year | Method | Key finding (as stated) | Cites |\n"
+        "|-----|-------|------|--------|-------------------------|-------|\n"
+        "| [1] | Paper A | 2023 | not stated | not stated | 10 |"
+    )
 
-    def test_returns_section_text(self):
+    def _make_tool(self, llm_response=None):
+        from deep_researcher.tools.extract import ExtractionTool
+        mock_llm = MagicMock()
+        mock_llm.chat_no_think.return_value = self.TABLE if llm_response is None else llm_response
+        return ExtractionTool(llm=mock_llm)
+
+    def test_returns_table_text(self):
         tool = self._make_tool()
         indexed = [(0, Paper(title="Paper A", abstract="Test abstract", citation_count=10))]
         result = tool.execute(indexed_papers=indexed, query="test query", category_name="Group A")
-        assert "Synthesis content here" in result.text
+        assert "| Ref | Paper |" in result.text
+        assert "Paper A" in result.text
 
     def test_handles_llm_failure(self):
-        from deep_researcher.tools.synthesize import SynthesisTool
+        from deep_researcher.tools.extract import ExtractionTool
         mock_llm = MagicMock()
         mock_llm.chat_no_think.side_effect = Exception("LLM error")
-        tool = SynthesisTool(llm=mock_llm)
+        tool = ExtractionTool(llm=mock_llm)
         indexed = [(0, Paper(title="Paper A"))]
         result = tool.execute(indexed_papers=indexed, query="test", category_name="A")
         assert "failed" in result.text.lower()
+
+    def test_no_papers_returns_message(self):
+        tool = self._make_tool()
+        result = tool.execute(indexed_papers=[], query="test", category_name="A")
+        assert "no papers" in result.text.lower()
 
     def test_is_read_only(self):
         tool = self._make_tool()
         assert tool.is_read_only is True
 
 
-class TestCrossAnalysisTool:
-    def _make_tool(self, llm_response="#### Cross-Category Patterns\nPatterns here"):
-        from deep_researcher.tools.cross_analysis import CrossAnalysisTool
-        mock_llm = MagicMock()
-        mock_llm.chat_no_think.return_value = llm_response
-        return CrossAnalysisTool(llm=mock_llm)
+class TestExtractionPrompt:
+    """The extraction prompt must enforce grounded, table-only output (no narrative)."""
 
-    def test_returns_analysis_text(self):
-        tool = self._make_tool()
-        sections = [("Group A", "Content A"), ("Group B", "Content B")]
-        result = tool.execute(sections=sections, query="test query")
-        assert "Patterns here" in result.text
-
-    def test_handles_llm_failure(self):
-        from deep_researcher.tools.cross_analysis import CrossAnalysisTool
-        mock_llm = MagicMock()
-        mock_llm.chat_no_think.side_effect = Exception("LLM error")
-        tool = CrossAnalysisTool(llm=mock_llm)
-        sections = [("A", "Content")]
-        result = tool.execute(sections=sections, query="test")
-        assert "unavailable" in result.text.lower()
-
-    def test_no_sections_returns_unavailable(self):
-        tool = self._make_tool()
-        result = tool.execute(sections=[], query="test")
-        assert "unavailable" in result.text.lower()
+    def test_prompt_enforces_grounding_and_table_only(self):
+        from deep_researcher.prompts import CATEGORY_EXTRACTION_PROMPT
+        prompt = CATEGORY_EXTRACTION_PROMPT.lower()
+        assert "not stated" in prompt           # absent facts are marked, never invented
+        assert "do not infer" in prompt         # no inference or generalization
+        assert "output only the table" in prompt  # no narrative prose around the table

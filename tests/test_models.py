@@ -149,9 +149,8 @@ class TestPipelineState:
         assert state.query == "test query"
         assert state.papers == {}
         assert state.categories is None
-        assert state.synthesis_papers == []
+        assert state.extraction_papers == []
         assert state.category_sections == []
-        assert state.cross_section == ""
         assert state.report == ""
 
     def test_evolve_creates_new_instance(self):

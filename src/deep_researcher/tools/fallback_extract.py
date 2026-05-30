@@ -1,7 +1,7 @@
-"""Fallback synthesis tool.
+"""Fallback extraction tool.
 
-Single-pass literature review when multi-step synthesis fails.
-This is a recovery tool (Principle 4: layered error recovery).
+Single-pass extraction table when the theme-by-theme path fails.
+This is a recovery tool (layered error recovery).
 """
 from __future__ import annotations
 
@@ -11,14 +11,15 @@ from deep_researcher.constants import FALLBACK_MAX_PAPERS, FALLBACK_TOKEN_BUDGET
 from deep_researcher.llm import LLMClient
 from deep_researcher.models import Paper, ToolResult
 from deep_researcher.parsing import build_tiered_corpus
+from deep_researcher.prompts import CATEGORY_EXTRACTION_PROMPT
 from deep_researcher.tools.base import Tool
 
 logger = logging.getLogger("deep_researcher")
 
 
-class FallbackSynthesisTool(Tool):
-    name = "fallback_synthesis"
-    description = "Single-pass literature review fallback when multi-step synthesis fails"
+class FallbackExtractionTool(Tool):
+    name = "fallback_extraction"
+    description = "Single-pass extraction table fallback when theme-by-theme extraction fails"
     is_read_only = True
     category = "utility"
     quality_tier = 1
@@ -34,23 +35,24 @@ class FallbackSynthesisTool(Tool):
         **kwargs,
     ) -> ToolResult:
         if not papers or not self._llm:
-            return ToolResult(text="Synthesis failed: no papers or LLM")
+            return ToolResult(text="Extraction failed: no papers or LLM")
 
         top_papers = papers[:FALLBACK_MAX_PAPERS]
         corpus = build_tiered_corpus(
             list(enumerate(top_papers)),
             token_budget=FALLBACK_TOKEN_BUDGET,
         )
-        prompt = (
-            f'Write a brief literature review on "{query}" based on these '
-            f"{len(top_papers)} papers. "
-            f"Categorize by theme, include a table per category.\n\n{corpus}"
+        prompt = CATEGORY_EXTRACTION_PROMPT.format(
+            query=query,
+            category="All papers",
+            count=len(top_papers),
+            corpus=corpus,
         )
         try:
             content = self._llm.chat_no_think([
                 {"role": "system", "content": prompt},
-                {"role": "user", "content": "Write the review."},
+                {"role": "user", "content": "Extract the table."},
             ])
             return ToolResult(text=content)
         except Exception as e:
-            return ToolResult(text=f"Synthesis failed: {e}")
+            return ToolResult(text=f"Extraction failed: {e}")

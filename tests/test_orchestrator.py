@@ -26,8 +26,7 @@ class TestOrchestrator:
         orch._search_tool = MagicMock()
         orch._enrichment_tool = MagicMock()
         orch._categorize_tool = MagicMock()
-        orch._synthesize_tool = MagicMock()
-        orch._cross_analysis_tool = MagicMock()
+        orch._extract_tool = MagicMock()
         orch.llm = MagicMock()
         return orch
 
@@ -55,18 +54,18 @@ class TestOrchestrator:
         new_state = orch._run_search(state)
         assert len(new_state.papers) == 0
 
-    def test_synthesis_fallback_on_categorization_failure(self):
+    def test_extraction_fallback_on_grouping_failure(self):
         orch = self._make_orchestrator()
         orch._categorize_tool.safe_execute.return_value = ToolResult(text="Failed", data=None)
         orch._fallback_tool = MagicMock()
-        orch._fallback_tool.safe_execute.return_value = ToolResult(text="Fallback synthesis content")
+        orch._fallback_tool.safe_execute.return_value = ToolResult(text="Fallback extraction content")
         papers = [Paper(title=f"P{i}", citation_count=10 - i) for i in range(5)]
         state = PipelineState(
             query="test",
             papers={p.unique_key: p for p in papers},
-            synthesis_papers=papers,
+            extraction_papers=papers,
         )
-        report = orch._run_synthesis(state)
+        report = orch._run_extraction(state)
         assert report.report  # should have fallback content
 
     def test_state_immutability(self):
@@ -101,17 +100,17 @@ class TestOrchestrator:
         state = PipelineState(
             query="test query",
             papers={p.unique_key: p for p in papers},
-            synthesis_papers=papers,
+            extraction_papers=papers,
             categories={"Group A": [0, 1]},
             category_sections=[("Group A", "Section content here")],
-            cross_section="Cross patterns here",
         )
         report = _assemble_report(state)
-        assert "### test query" in report
+        assert "### Literature search: test query" in report
         assert "#### Coverage" in report
+        assert "#### Themes" in report
         assert "##### Group A" in report
         assert "Section content here" in report
-        assert "Cross patterns here" in report
+        assert "Cross-Category" not in report  # cross-category analysis removed
         assert "#### References" in report
         assert "[1] Alice (2023)" in report
         assert "[2] Bob et al. (2024)" in report

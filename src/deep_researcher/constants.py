@@ -10,21 +10,21 @@ CHARS_PER_TOKEN = 4  # Rough approximation for English text
 SCHOLAR_MAX_RESULTS = 100          # Max papers to fetch from Google Scholar
 
 
-# --- Synthesis phase ---
-MAX_SYNTHESIS_PAPERS = 200          # Cap on papers sent to synthesis
-MAX_FINAL_CATEGORIES = 6            # Target number of categories after merging
-CATEGORIZE_BATCH_SIZE = 20          # Papers per categorization LLM call
-CATEGORY_SYNTHESIS_TIMEOUT = 300    # Seconds before skipping a category (5 min)
-CATEGORY_TOKEN_BUDGET = 15_000      # Token budget per category corpus
+# --- Extraction phase ---
+MAX_EXTRACTION_PAPERS = 200         # Cap on papers sent to extraction
+MAX_FINAL_CATEGORIES = 6            # Target number of themes after merging
+CATEGORIZE_BATCH_SIZE = 20          # Papers per grouping LLM call
+CATEGORY_EXTRACTION_TIMEOUT = 300   # Seconds before skipping a theme (5 min)
+CATEGORY_TOKEN_BUDGET = 15_000      # Token budget per theme corpus
 FALLBACK_TOKEN_BUDGET = 8_000       # Token budget for single-pass fallback
-FALLBACK_MAX_PAPERS = 20            # Max papers for fallback synthesis
+FALLBACK_MAX_PAPERS = 20            # Max papers for fallback extraction
 
 # --- Tier-1 sources (peer-reviewed / curated) ---
 TIER1_SOURCES = frozenset({"scopus", "ieee", "pubmed"})
 
 # --- Concurrency ---
 MAX_TOOL_CONCURRENCY = 8            # Max parallel tool executions (enrichment HTTP)
-MAX_SYNTHESIS_CONCURRENCY = 3       # Max parallel LLM synthesis calls per phase
+MAX_EXTRACTION_CONCURRENCY = 3      # Max parallel LLM extraction calls per phase
 
 # --- Display / truncation ---
 ABSTRACT_MAX_CHARS = 250            # Max abstract length in corpus entries
