@@ -38,6 +38,7 @@ class Config:
     start_year: int | None = None
     end_year: int | None = None
     interactive: bool = False
+    no_cache: bool = False
 
     def __post_init__(self) -> None:
         file_cfg = _load_config_file()
