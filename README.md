@@ -152,6 +152,9 @@ output/2026-04-02-161823-large-language-models-for-automated-code/
 
 ## Usage
 
+For help finding terminology before a literature search, see the optional
+[Parallel Search MCP workflow](guides/parallel-search.md) for Claude Code.
+
 ```
 deep-researcher "your research question" [options]
 
